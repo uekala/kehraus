@@ -17,6 +17,9 @@ data class AppUsage(
 ) {
     val total: Long get() = appBytes + dataBytes
 
+    /** Daten ohne den Cache: Downloads, Mediatheken, Datenbanken. Das leert kein „Cache leeren". */
+    val contentBytes: Long get() = (dataBytes - cacheBytes).coerceAtLeast(0)
+
     /** Tage seit der letzten Nutzung; null, wenn keine Nutzung aufgezeichnet ist. */
     fun idleDays(now: Long): Int? =
         if (lastUsed <= 0) null else ((now - lastUsed) / Rules.DAY_MS).toInt().coerceAtLeast(0)
@@ -26,6 +29,10 @@ data class AppUsage(
 object AppAdvice {
     fun bySize(apps: List<AppUsage>, includeSystem: Boolean): List<AppUsage> =
         apps.filter { includeSystem || !it.system }.sortedByDescending { it.total }
+
+    /** Apps, deren eigene Inhalte viel Platz belegen. Aufräumen lässt sich das nur in der App selbst. */
+    fun byContent(apps: List<AppUsage>, minBytes: Long = 1024 * Rules.MB): List<AppUsage> =
+        apps.filter { it.contentBytes >= minBytes }.sortedByDescending { it.contentBytes }
 
     fun byCache(apps: List<AppUsage>, minBytes: Long = 20 * Rules.MB): List<AppUsage> =
         apps.filter { it.cacheBytes >= minBytes }.sortedByDescending { it.cacheBytes }

@@ -186,19 +186,6 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () 
     ) {
         Heading("Kehraus")
 
-        vm.apps?.let { apps ->
-            val cache = apps.sumOf { it.cacheBytes }
-            if (cache >= 1024L * 1024 * 1024) {
-                Panel("App-Cache") {
-                    KeyValue("Im Cache der Apps", vm.size(cache))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Dim("Leeren kann den nur Android selbst, App für App.", Modifier.weight(1f), size = 12)
-                        TextButton(onClick = onOpenApps) { Text("Apps") }
-                    }
-                }
-            }
-        }
-
         if (!vm.hasAccess) {
             Panel("Zugriff nötig") {
                 Dim(
@@ -227,6 +214,19 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () 
                         else "Der Speicher wird knapp.",
                         color = Warn, fontSize = 13.sp,
                     )
+                }
+            }
+        }
+
+        vm.apps?.let { apps ->
+            val cache = apps.sumOf { it.cacheBytes }
+            if (cache >= 1024L * 1024 * 1024) {
+                Panel("App-Cache") {
+                    KeyValue("Im Cache der Apps", vm.size(cache))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dim("Leeren kann den nur Android selbst, App für App.", Modifier.weight(1f), size = 12)
+                        TextButton(onClick = onOpenApps) { Text("Apps") }
+                    }
                 }
             }
         }
@@ -695,6 +695,7 @@ private fun AppsScreen(vm: MainViewModel) {
             val unused = remember(apps) { AppAdvice.unused(apps, now, self = ctx.packageName) }
             val neverSeen = remember(apps) { AppAdvice.neverSeen(apps, self = ctx.packageName) }
             val cache = remember(apps) { AppAdvice.byCache(apps) }
+            val content = remember(apps) { AppAdvice.byContent(apps) }
             val sorted = remember(apps, showSystem) { AppAdvice.bySize(apps, showSystem) }
 
             Panel("Überblick") {
@@ -714,6 +715,14 @@ private fun AppsScreen(vm: MainViewModel) {
                     Text("${cache.size} Apps · ${vm.size(cache.sumOf { it.cacheBytes })}", color = Accent)
                     Dim("Cache leeren ist gefahrlos: Die App lädt bei Bedarf neu. Der Platz kann sich aber wieder füllen.", size = 12)
                     cache.take(25).forEach { AppRow(vm, it, now, vm.size(it.cacheBytes)) }
+                }
+            }
+
+            if (content.isNotEmpty()) {
+                Panel("Viele eigene Daten") {
+                    Text("${content.size} Apps · ${vm.size(content.sumOf { it.contentBytes })}", color = Accent)
+                    Dim("Daten ohne den Cache: Downloads, Mediatheken, Chats. „Cache leeren“ hilft hier nicht – aufräumen geht nur in der App selbst, etwa heruntergeladene Musik oder Karten entfernen.", size = 12)
+                    content.take(15).forEach { AppRow(vm, it, now, vm.size(it.contentBytes)) }
                 }
             }
 
@@ -758,7 +767,8 @@ private fun AppRow(vm: MainViewModel, app: AppUsage, now: Long, value: String) {
                 app.service -> "läuft als Dienst"
                 idle == null -> "keine Nutzung aufgezeichnet"
                 idle == 0 -> "heute genutzt"
-                else -> "zuletzt vor ${days(idle)}"
+                idle == 1 -> "zuletzt vor 1 Tag"
+                else -> "zuletzt vor $idle Tagen"
             }
             Dim("App ${vm.size(app.appBytes)} · Daten ${vm.size(app.dataBytes)} · Cache ${vm.size(app.cacheBytes)} · $used", size = 12)
         }

@@ -18,3 +18,4 @@
 - Reste entfernter Apps in der Analyse
 - Erinnerung bei viel App-Cache, Cache-Summe auf der Übersicht
 - Exakte Duplikate als eigene Regel für den täglichen Lauf
+- Apps: eigene Liste für Apps mit vielen Daten außerhalb des Caches

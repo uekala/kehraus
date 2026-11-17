@@ -52,6 +52,13 @@ class AppAdviceTest {
     }
 
     @Test
+    fun `viele Daten zählt ohne den Cache`() {
+        assertEquals(3700 * mb, apps[0].contentBytes)
+        assertEquals(listOf("spiel", "system"), AppAdvice.byContent(apps).map { it.pkg })
+        assertEquals(0L, app("schief", 1, 5, cacheMb = 9).contentBytes)
+    }
+
+    @Test
     fun `Tage seit der letzten Nutzung`() {
         assertEquals(200, apps[0].idleDays(now))
         assertNull(apps[3].idleDays(now))
