@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -68,6 +69,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.uekala.kehraus.MainViewModel
 import de.uekala.kehraus.MainViewModel.Companion.files
+import de.uekala.kehraus.core.AppAdvice
+import de.uekala.kehraus.core.AppUsage
 import de.uekala.kehraus.core.DupGroup
 import de.uekala.kehraus.core.FileInfo
 import de.uekala.kehraus.core.Group
@@ -78,6 +81,7 @@ import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
 import de.uekala.kehraus.core.Rules
 import de.uekala.kehraus.core.TrashEntry
+import de.uekala.kehraus.data.Apps
 import de.uekala.kehraus.data.Storage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -124,6 +128,7 @@ fun App(vm: MainViewModel) {
                     "Übersicht" to Icons.Filled.Home,
                     "Regeln" to Icons.Filled.Settings,
                     "Analyse" to Icons.Filled.Search,
+                    "Apps" to Icons.Filled.Menu,
                     "Papierkorb" to Icons.Filled.Delete,
                 )
                 tabs.forEachIndexed { i, (label, icon) ->
@@ -131,7 +136,7 @@ fun App(vm: MainViewModel) {
                         selected = tab == i,
                         onClick = { tab = i },
                         icon = { Icon(icon, contentDescription = null) },
-                        label = { Text(label) },
+                        label = { Text(label, maxLines = 1, fontSize = 11.sp) },
                     )
                 }
             }
@@ -142,6 +147,7 @@ fun App(vm: MainViewModel) {
                 0 -> Overview(vm, onOpenRules = { tab = 1 })
                 1 -> RulesScreen(vm)
                 2 -> AnalysisScreen(vm)
+                3 -> AppsScreen(vm)
                 else -> TrashScreen(vm)
             }
         }
@@ -605,6 +611,95 @@ private fun DupRow(vm: MainViewModel, g: DupGroup) {
             Dim("${files(g.copies.size)} doppelt · ${vm.size(g.wasted)} · in ${g.copies.map { it.parent.substringAfterLast('/') }.distinct().joinToString(", ")}", size = 12)
         }
         TextButton(onClick = { vm.trashFiles(g.copies.map { it.path }, MainViewModel.DUPLICATE) }, enabled = !vm.busy) { Text("Weg") }
+    }
+}
+
+// ---------- Apps ----------
+
+@Composable
+private fun AppsScreen(vm: MainViewModel) {
+    val ctx = LocalContext.current
+    var showSystem by rememberSaveable { mutableStateOf(false) }
+    val apps = vm.apps
+    LaunchedEffect(vm.usageAccess) {
+        if (vm.usageAccess && vm.apps == null) vm.loadApps()
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Heading("Apps")
+        Dim("Der meiste Platz steckt oft in Apps und ihren Daten. Kehraus kann fremde Apps weder leeren noch entfernen – ein Tipp öffnet die Systemseite der App, dort gibt es „Cache leeren“ und „Deinstallieren“.")
+
+        if (!vm.usageAccess) {
+            Panel("Zugriff nötig") {
+                Dim("Für Größe und letzte Nutzung der Apps braucht Kehraus den Nutzungsdatenzugriff. In der Liste Kehraus auswählen und den Zugriff erlauben.")
+                Button(onClick = { Apps.openUsageSettings(ctx) }) { Text("Zugriff erlauben") }
+            }
+        } else if (apps == null) {
+            Dim(if (vm.loadingApps) "Apps werden ausgelesen …" else "Noch nicht ausgelesen.")
+        } else {
+            val now = remember(apps) { System.currentTimeMillis() }
+            val unused = remember(apps) { AppAdvice.unused(apps, now, self = ctx.packageName) }
+            val cache = remember(apps) { AppAdvice.byCache(apps) }
+            val sorted = remember(apps, showSystem) { AppAdvice.bySize(apps, showSystem) }
+
+            Panel("Überblick") {
+                KeyValue("Apps mit Daten", "${apps.size} · ${vm.size(apps.sumOf { it.total })}")
+                KeyValue("davon Cache", vm.size(apps.sumOf { it.cacheBytes }))
+                vm.storage?.let { s -> KeyValue("Belegt insgesamt", vm.size(s.total - s.free)) }
+                OutlinedButton(onClick = { vm.loadApps() }, enabled = !vm.loadingApps) {
+                    Text(if (vm.loadingApps) "Liest aus …" else "Neu auslesen")
+                }
+            }
+
+            Panel("Lange nicht genutzt") {
+                if (unused.isEmpty()) {
+                    Dim("Keine größere App, die seit 60 Tagen ungenutzt ist.")
+                } else {
+                    Text("${unused.size} Apps · ${vm.size(unused.sumOf { it.total })}", color = Accent)
+                    Dim("Selbst installiert, mindestens 50 MB, seit 60 Tagen nicht geöffnet. „Keine Nutzung aufgezeichnet“ kann auch ein Dienst im Hintergrund sein, etwa eine Tastatur.", size = 12)
+                    unused.take(25).forEach { AppRow(vm, it, now, vm.size(it.total)) }
+                }
+            }
+
+            Panel("Größter Cache") {
+                if (cache.isEmpty()) {
+                    Dim("Kein nennenswerter Cache.")
+                } else {
+                    Dim("Cache leeren ist gefahrlos: Die App lädt bei Bedarf neu. Der Platz kann sich aber wieder füllen.", size = 12)
+                    cache.take(15).forEach { AppRow(vm, it, now, vm.size(it.cacheBytes)) }
+                }
+            }
+
+            Panel("Alle nach Größe") {
+                SwitchRow("System-Apps zeigen", null, showSystem) { showSystem = it }
+                sorted.take(50).forEach { AppRow(vm, it, now, vm.size(it.total)) }
+                if (sorted.size > 50) Dim("… und ${sorted.size - 50} weitere", size = 12)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppRow(vm: MainViewModel, app: AppUsage, now: Long, value: String) {
+    val ctx = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().clickable { Apps.openDetails(ctx, app.pkg) }.padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(app.label + " ›", color = TextMain, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val idle = app.idleDays(now)
+            val used = when {
+                idle == null -> "keine Nutzung aufgezeichnet"
+                idle == 0 -> "heute genutzt"
+                else -> "zuletzt vor ${days(idle)}"
+            }
+            Dim("App ${vm.size(app.appBytes)} · Daten ${vm.size(app.dataBytes)} · Cache ${vm.size(app.cacheBytes)} · $used", size = 12)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(value, color = TextDim, fontSize = 14.sp)
     }
 }
 

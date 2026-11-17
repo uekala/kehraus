@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import de.uekala.kehraus.bg.CleanWorker
 import de.uekala.kehraus.bg.Runner
 import de.uekala.kehraus.core.Analysis
+import de.uekala.kehraus.core.AppUsage
 import de.uekala.kehraus.core.DupGroup
 import de.uekala.kehraus.core.Duplicates
 import de.uekala.kehraus.core.HistoryEntry
@@ -20,6 +21,7 @@ import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
 import de.uekala.kehraus.core.RuleResult
 import de.uekala.kehraus.core.TrashEntry
+import de.uekala.kehraus.data.Apps
 import de.uekala.kehraus.data.LastRun
 import de.uekala.kehraus.data.Prefs
 import de.uekala.kehraus.data.Storage
@@ -65,6 +67,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Pfade, die seit der Analyse in den Papierkorb gewandert sind – die Listen blenden sie aus. */
     var gone by mutableStateOf<Set<String>>(emptySet()); private set
 
+    var usageAccess by mutableStateOf(Apps.hasUsageAccess(app)); private set
+
+    /** Installierte Apps mit Größe und letzter Nutzung; null, solange noch nicht ausgelesen. */
+    var apps by mutableStateOf<List<AppUsage>?>(null); private set
+    var loadingApps by mutableStateOf(false); private set
+
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null)
 
@@ -81,6 +89,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         totalFreed = Prefs.totalFreed(ctx)
         held = heldRules()
         history = runCatching { Storage.history(ctx).entries().take(30) }.getOrDefault(emptyList())
+        // Nach der Rückkehr aus den Systemeinstellungen (Zugriff erteilt, Cache geleert, App entfernt) neu auslesen.
+        val hadUsageAccess = usageAccess
+        usageAccess = Apps.hasUsageAccess(ctx)
+        if (usageAccess && (apps != null || !hadUsageAccess)) loadApps()
         if (!hasAccess) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -174,6 +186,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             busy = false
             message = text
             refresh()
+        }
+    }
+
+    // ---------- Apps ----------
+
+    fun loadApps() {
+        usageAccess = Apps.hasUsageAccess(ctx)
+        if (!usageAccess || loadingApps) return
+        loadingApps = true
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { runCatching { Apps.load(ctx) } }
+            loadingApps = false
+            if (list.isSuccess) apps = list.getOrNull() else message = "Apps konnten nicht ausgelesen werden"
         }
     }
 

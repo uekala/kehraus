@@ -79,8 +79,14 @@ Exakte Duplikate (Inhalt Byte für Byte gleich) werden in Gruppen angezeigt. Es 
 besten Platz – Kameraordner vor Bilderordnern vor Downloads vor Messenger-Ordnern, bei Gleichstand die
 ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb; automatisch passiert hier nichts.
 
+## Apps
+
+Der Reiter *Apps* listet die installierten Apps mit Größe (App, Daten, Cache) und letzter Nutzung:
+lange nicht genutzte Apps, die größten Caches und alle Apps nach Größe. Ein Tipp öffnet die
+Systemseite der App mit „Cache leeren" und „Deinstallieren" – selbst kann die App fremde Apps weder
+leeren noch entfernen. Nötig ist dafür einmalig der Nutzungsdatenzugriff in den Systemeinstellungen.
+
 ## Geplant
 
 - Ähnliche Fotos und Serienbilder, unscharfe Bilder
 - Fotos und Downloads nach Regeln in Ordner sortieren
-- Ungenutzte Apps auflisten
