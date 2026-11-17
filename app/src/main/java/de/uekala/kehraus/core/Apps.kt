@@ -12,6 +12,8 @@ data class AppUsage(
     /** Zeitpunkt der letzten Nutzung; 0, wenn das System keine Nutzung aufgezeichnet hat. */
     val lastUsed: Long,
     val system: Boolean,
+    /** Läuft als Dienst, ohne je geöffnet zu werden: aktive Tastatur, Startbildschirm, Bedienungshilfe. */
+    val service: Boolean = false,
 ) {
     val total: Long get() = appBytes + dataBytes
 
@@ -40,7 +42,7 @@ object AppAdvice {
         minBytes: Long = 50 * Rules.MB,
     ): List<AppUsage> = apps.filter { app ->
         val idle = app.idleDays(now)
-        !app.system && app.pkg != self && app.total >= minBytes && idle != null && idle >= minDays
+        !app.system && !app.service && app.pkg != self && app.total >= minBytes && idle != null && idle >= minDays
     }.sortedByDescending { it.total }
 
     /**
@@ -51,6 +53,6 @@ object AppAdvice {
         apps: List<AppUsage>,
         self: String,
         minBytes: Long = 50 * Rules.MB,
-    ): List<AppUsage> = apps.filter { !it.system && it.pkg != self && it.total >= minBytes && it.lastUsed <= 0 }
+    ): List<AppUsage> = apps.filter { !it.system && !it.service && it.pkg != self && it.total >= minBytes && it.lastUsed <= 0 }
         .sortedByDescending { it.total }
 }

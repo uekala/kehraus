@@ -38,14 +38,37 @@ object Apps {
     fun installed(ctx: Context): Set<String> =
         runCatching { ctx.packageManager.getInstalledApplications(0).map { it.packageName }.toSet() }.getOrDefault(emptySet())
 
+    /** Apps, die arbeiten, ohne geöffnet zu werden: aktive Tastatur, Startbildschirm, eingeschaltete Bedienungshilfen. */
+    private fun servicePackages(ctx: Context): Set<String> {
+        val found = HashSet<String>()
+        val resolver = ctx.contentResolver
+        fun addComponents(setting: String) {
+            runCatching {
+                Settings.Secure.getString(resolver, setting).orEmpty().split(':')
+                    .forEach { c -> c.substringBefore('/').takeIf { it.isNotBlank() }?.let(found::add) }
+            }
+        }
+        addComponents(Settings.Secure.DEFAULT_INPUT_METHOD)
+        addComponents(Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        runCatching {
+            val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            ctx.packageManager.resolveActivity(home, 0)?.activityInfo?.packageName?.let(found::add)
+        }
+        return found
+    }
+
     fun load(ctx: Context): List<AppUsage> {
         val pm = ctx.packageManager
         val storage = ctx.getSystemService(StorageStatsManager::class.java)
         val usage = ctx.getSystemService(UsageStatsManager::class.java)
         val now = System.currentTimeMillis()
+        // Nicht nur „geöffnet": auch sichtbar gewesen oder als Vordergrunddienst gelaufen zählt als genutzt.
         val lastUsed = runCatching {
-            usage.queryAndAggregateUsageStats(now - TWO_YEARS, now).mapValues { it.value.lastTimeUsed }
+            usage.queryAndAggregateUsageStats(now - TWO_YEARS, now).mapValues {
+                maxOf(it.value.lastTimeUsed, it.value.lastTimeVisible, it.value.lastTimeForegroundServiceUsed)
+            }
         }.getOrDefault(emptyMap())
+        val services = servicePackages(ctx)
         val user = Process.myUserHandle()
 
         return pm.getInstalledApplications(0).mapNotNull { info ->
@@ -62,6 +85,7 @@ object Apps {
                 cacheBytes = stats.cacheBytes,
                 lastUsed = (lastUsed[info.packageName] ?: 0L).takeIf { it >= SANE_SINCE } ?: 0L,
                 system = system,
+                service = info.packageName in services,
             )
         }
     }

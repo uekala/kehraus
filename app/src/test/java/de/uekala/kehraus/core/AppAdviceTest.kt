@@ -46,6 +46,9 @@ class AppAdviceTest {
     fun `Apps ohne aufgezeichnete Nutzung stehen in einer eigenen Liste`() {
         val more = apps + app("vorinstalliert", 500, 500, idleDays = null, system = true) + app("winzig", 1, 1, idleDays = null)
         assertEquals(listOf("tastatur"), AppAdvice.neverSeen(more, self = "kehraus").map { it.pkg })
+        val marked = more.map { if (it.pkg == "tastatur" || it.pkg == "spiel") it.copy(service = true) else it }
+        assertEquals(emptyList<String>(), AppAdvice.neverSeen(marked, self = "kehraus").map { it.pkg })
+        assertEquals(emptyList<String>(), AppAdvice.unused(marked, now, self = "kehraus").map { it.pkg })
     }
 
     @Test
