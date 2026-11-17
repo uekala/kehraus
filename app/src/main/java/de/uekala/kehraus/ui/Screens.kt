@@ -755,6 +755,7 @@ private fun AppRow(vm: MainViewModel, app: AppUsage, now: Long, value: String) {
             Text(app.label + " ›", color = TextMain, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val idle = app.idleDays(now)
             val used = when {
+                app.service -> "läuft als Dienst"
                 idle == null -> "keine Nutzung aufgezeichnet"
                 idle == 0 -> "heute genutzt"
                 else -> "zuletzt vor ${days(idle)}"
