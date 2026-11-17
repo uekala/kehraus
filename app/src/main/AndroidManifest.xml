@@ -8,6 +8,14 @@
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- App-Übersicht: alle installierten Apps sehen und deren Größe und letzte Nutzung lesen. -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
     <application
         android:name=".KehrausApp"
         android:allowBackup="false"
