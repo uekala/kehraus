@@ -12,12 +12,29 @@ Jede Regel ist einzeln ein- und ausschaltbar. Nach der Installation sind alle au
 | Regel | Durchsucht | Voreinstellung |
 | --- | --- | --- |
 | Screenshots | Bildschirmfotos und Bildschirmaufnahmen | älter als 30 Tage |
-| WhatsApp-Medien | Bilder, Videos und GIFs aus WhatsApp | älter als 60 Tage |
-| Downloads | alles im Download-Ordner | älter als 90 Tage |
 | Große Videos | Videos in `DCIM`, `Movies`, `Pictures` | ab 200 MB, älter als 180 Tage |
+| WhatsApp · Bilder und Videos | Bilder, Videos und GIFs | älter als 60 Tage |
+| WhatsApp · Gesendete Kopien | die `Sent`-Ordner | älter als 14 Tage |
+| WhatsApp · Sprachnachrichten und Audio | Sprachnachrichten, Audiodateien | älter als 90 Tage |
+| WhatsApp · Dokumente | PDFs und andere Dateien | älter als 180 Tage |
+| Telegram-Dateien | alles, was Telegram im Gerätespeicher ablegt | älter als 60 Tage |
+| Installationsdateien | APK-Dateien im Download-Ordner | älter als 7 Tage |
+| Downloads | alles im Download-Ordner | älter als 90 Tage |
+
+Dazu als eigener Schalter: leere Ordner entfernen (in `Download`, `Pictures`, `DCIM`, `Movies`,
+`Documents`, `Music`; werden direkt gelöscht, da nichts aufzuheben ist).
 
 Jede Regel zeigt vorab, wie viele Dateien sie im Moment treffen würde, und listet sie auf.
 Versteckte Dateien und Ordner bleiben immer unberührt.
+
+## Sicherungen
+
+- **Papierkorb mit Frist:** nichts wird sofort gelöscht (siehe unten).
+- **Schutzliste:** Ordner (mit allem darunter) und einzelne Dateien, die keine Regel anfasst.
+- **Notbremse:** Würde eine Regel in einem Lauf mehr als 500 Dateien oder 5 GB verschieben, hält
+  sie an und wartet auf eine Bestätigung in der App. Das betrifft vor allem den ersten Lauf.
+- **Verlauf:** was wann von welcher Regel verschoben oder endgültig gelöscht wurde.
+- **Speicher knapp:** Unter 10 % freiem Speicher weist die App darauf hin, wie viel im Papierkorb liegt.
 
 ## Papierkorb
 
@@ -54,5 +71,6 @@ in ein GitHub-Secret.
 
 ## Geplant
 
-- Doppelte und ähnliche Fotos finden
-- Fotos nach Regeln in Ordner sortieren
+- Speicher-Analyse, doppelte und ähnliche Fotos
+- Fotos und Downloads nach Regeln in Ordner sortieren
+- Ungenutzte Apps auflisten
