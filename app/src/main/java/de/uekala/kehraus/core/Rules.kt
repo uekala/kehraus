@@ -29,6 +29,8 @@ enum class RuleId(
     val insideFolder: String? = null,
     /** Ordner relativ zum Gerätespeicher, die diese Regel nie betritt. */
     val skipFolders: List<String> = emptyList(),
+    /** false bei Regeln, für die das Alter einer Datei keine Rolle spielt. */
+    val usesAge: Boolean = true,
 ) {
     SCREENSHOTS(
         Group.MEDIA, "Screenshots",
@@ -97,6 +99,15 @@ enum class RuleId(
         "Alles im Download-Ordner, das seit der Frist nicht mehr geändert wurde.",
         listOf("Download"),
         defaultAgeDays = 90,
+    ),
+
+    /** Sonderfall: Die Treffer kommen nicht aus Ordnern, sondern aus dem Inhaltsvergleich in [Duplicates]. */
+    DUPLICATES(
+        Group.FILES, "Exakte Duplikate",
+        "Dateien mit Byte für Byte gleichem Inhalt. Es bleibt die Datei am besten Platz, bevorzugt im Kameraordner – die Kopien wandern in den Papierkorb.",
+        emptyList(),
+        defaultAgeDays = 1,
+        usesAge = false,
     ),
 }
 

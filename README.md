@@ -20,6 +20,7 @@ Jede Regel ist einzeln ein- und ausschaltbar. Nach der Installation sind alle au
 | Telegram-Dateien | alles, was Telegram im Gerätespeicher ablegt | älter als 60 Tage |
 | Installationsdateien | APK-Dateien im ganzen Gerätespeicher, außer in App-Ordnern | älter als 7 Tage |
 | Downloads | alles im Download-Ordner | älter als 90 Tage |
+| Exakte Duplikate | Dateien mit gleichem Inhalt im ganzen Gerätespeicher | ohne Frist |
 
 Dazu als eigener Schalter: leere Ordner entfernen (in `Download`, `Pictures`, `DCIM`, `Movies`,
 `Documents`, `Music`; werden direkt gelöscht, da nichts aufzuheben ist).
@@ -81,7 +82,8 @@ Apps und ihre Daten zählen nicht mit, darauf hat die App keinen Zugriff.
 
 Exakte Duplikate (Inhalt Byte für Byte gleich) werden in Gruppen angezeigt. Es bleibt die Datei am
 besten Platz – Kameraordner vor Bilderordnern vor Downloads vor Messenger-Ordnern, bei Gleichstand die
-ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb; automatisch passiert hier nichts.
+ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb. Wer mag, schaltet dasselbe unter *Regeln* als
+tägliche Regel ein.
 
 Ebenfalls dort: Reste entfernter Apps – Ordner unter `Android/media`, deren App nicht mehr
 installiert ist.

@@ -129,6 +129,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun preview(rule: RuleConfig, now: Long, guard: Protection): Preview {
+        // Der Inhaltsvergleich liest viele Dateien ganz. Solange die Regel aus ist, läuft er nur im Reiter Analyse.
+        if (rule.id == RuleId.DUPLICATES && !rule.enabled) return Preview(-1, 0, emptyList())
         val hits = runCatching { Storage.engine().preview(rule, now, guard) }.getOrDefault(emptyList())
         return Preview(hits.size, hits.sumOf { it.size }, hits.sortedByDescending { it.size }.take(200))
     }
@@ -338,7 +340,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Herkunft im Papierkorb für Dateien, die keine Regel verschoben hat. */
         const val MANUAL = "MANUAL"
-        const val DUPLICATE = "DUPLICATE"
+        const val DUPLICATE = "DUPLICATES"
         const val ORPHAN = "ORPHAN"
     }
 }

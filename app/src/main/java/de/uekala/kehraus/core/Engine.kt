@@ -52,7 +52,16 @@ data class RunOptions(
 class Engine(private val root: File, val trash: Trash) {
 
     fun preview(rule: RuleConfig, now: Long, protection: Protection = Protection()): List<Hit> =
-        Rules.find(root, rule, now, exclude = trash.dir, protection = protection)
+        if (rule.id == RuleId.DUPLICATES) duplicateCopies(protection)
+        else Rules.find(root, rule, now, exclude = trash.dir, protection = protection)
+
+    /** Die Kopien aller Duplikat-Gruppen; das jeweilige Original ist nicht dabei. */
+    private fun duplicateCopies(protection: Protection): List<Hit> {
+        val report = Analysis.scan(root, trash.dir)
+        return Duplicates.find(report.files, report.root, protection)
+            .flatMap { it.copies }
+            .map { Hit(File(it.path), it.size, it.modified) }
+    }
 
     fun run(rules: List<RuleConfig>, options: RunOptions, now: Long): RunResult {
         val purged = trash.purge(now, options.retentionDays)

@@ -427,7 +427,9 @@ private fun RuleCard(vm: MainViewModel, rule: RuleConfig, onShow: () -> Unit) {
         trailing = { Switch(checked = rule.enabled, onCheckedChange = { vm.setRule(rule.copy(enabled = it)) }) },
     ) {
         Dim(rule.id.description, size = 13)
-        Stepper("Älter als", rule.ageDays, AGE_OPTIONS, ::days) { vm.setRule(rule.copy(ageDays = it)) }
+        if (rule.id.usesAge) {
+            Stepper("Älter als", rule.ageDays, AGE_OPTIONS, ::days) { vm.setRule(rule.copy(ageDays = it)) }
+        }
         if (rule.id.defaultMinSizeMb > 0) {
             Stepper("Ab Größe", rule.minSizeMb, SIZE_OPTIONS, ::megabytes) { vm.setRule(rule.copy(minSizeMb = it)) }
         }
@@ -437,6 +439,7 @@ private fun RuleCard(vm: MainViewModel, rule: RuleConfig, onShow: () -> Unit) {
                 when {
                     !vm.hasAccess -> "Vorschau erst mit Dateizugriff"
                     p == null -> "Wird gezählt …"
+                    p.count < 0 -> "Vorschau im Reiter „Analyse“"
                     p.count == 0 -> "Trifft im Moment nichts"
                     else -> "Trifft jetzt ${files(p.count)} · ${vm.size(p.bytes)}"
                 },

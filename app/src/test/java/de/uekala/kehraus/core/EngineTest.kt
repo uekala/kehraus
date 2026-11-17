@@ -389,4 +389,25 @@ class EngineTest {
         assertEquals(entries.first(), History.parse(History.format(entries.first())))
         assertNull(History.parse("kaputt"))
     }
+
+    @Test
+    fun `Duplikate als Regel behalten das Original und unterliegen Schutzliste und Notbremse`() {
+        val content = ByteArray(40_000) { (it % 97).toByte() }
+        fun copy(path: String) = File(root, path).apply { parentFile!!.mkdirs(); writeBytes(content); setLastModified(now) }
+        val camera = copy("DCIM/Camera/IMG_1.jpg")
+        val download = copy("Download/IMG_1.jpg")
+        val whatsapp = copy("$wa/WhatsApp Images/IMG-1.jpg")
+        val rule = listOf(on(RuleId.DUPLICATES))
+
+        assertEquals(2, engine.preview(on(RuleId.DUPLICATES), now).size)
+        assertTrue(engine.run(rule, RunOptions(brake = Brake(maxFiles = 1)), now).held.isNotEmpty())
+        val guarded = Protection(files = setOf(download.absolutePath))
+        val result = engine.run(rule, RunOptions(protection = guarded), now)
+
+        assertEquals(1, result.moved)
+        assertTrue(camera.exists() && download.exists())
+        assertFalse(whatsapp.exists())
+        assertEquals("DUPLICATES", trash.entries().single().rule)
+        assertEquals(0, engine.run(rule, RunOptions(protection = guarded), now).moved)
+    }
 }
