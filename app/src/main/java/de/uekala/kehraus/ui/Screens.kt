@@ -650,5 +650,5 @@ private fun loadThumb(file: File, kind: Kind, px: Int): ImageBitmap? = when (kin
         }
     }
     Kind.VIDEO -> ThumbnailUtils.createVideoThumbnail(file, Size(px, px), null).asImageBitmap()
-    Kind.OTHER -> null
+    Kind.AUDIO, Kind.OTHER -> null
 }
