@@ -38,9 +38,14 @@ class AppAdviceTest {
     }
 
     @Test
-    fun `ungenutzt heißt selbst installiert groß genug und lange nicht geöffnet`() {
-        val unused = AppAdvice.unused(apps, now, self = "kehraus")
-        assertEquals(listOf("spiel", "tastatur"), unused.map { it.pkg })
+    fun `ungenutzt heißt selbst installiert groß genug und nachweislich lange nicht geöffnet`() {
+        assertEquals(listOf("spiel"), AppAdvice.unused(apps, now, self = "kehraus").map { it.pkg })
+    }
+
+    @Test
+    fun `Apps ohne aufgezeichnete Nutzung stehen in einer eigenen Liste`() {
+        val more = apps + app("vorinstalliert", 500, 500, idleDays = null, system = true) + app("winzig", 1, 1, idleDays = null)
+        assertEquals(listOf("tastatur"), AppAdvice.neverSeen(more, self = "kehraus").map { it.pkg })
     }
 
     @Test

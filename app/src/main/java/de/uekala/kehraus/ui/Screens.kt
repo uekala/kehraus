@@ -653,6 +653,7 @@ private fun AppsScreen(vm: MainViewModel) {
         if (!vm.usageAccess) {
             Panel("Zugriff nötig") {
                 Dim("Für Größe und letzte Nutzung der Apps braucht Kehraus den Nutzungsdatenzugriff. In der Liste Kehraus auswählen und den Zugriff erlauben.")
+                Dim("Ist der Schalter grau („eingeschränkte Einstellung“): in den Android-Einstellungen unter Apps → Kehraus oben rechts auf die drei Punkte tippen und „Eingeschränkte Einstellungen zulassen“ wählen. Danach lässt er sich umlegen.", size = 12)
                 Button(onClick = { Apps.openUsageSettings(ctx) }) { Text("Zugriff erlauben") }
             }
         } else if (apps == null) {
@@ -660,15 +661,27 @@ private fun AppsScreen(vm: MainViewModel) {
         } else {
             val now = remember(apps) { System.currentTimeMillis() }
             val unused = remember(apps) { AppAdvice.unused(apps, now, self = ctx.packageName) }
+            val neverSeen = remember(apps) { AppAdvice.neverSeen(apps, self = ctx.packageName) }
             val cache = remember(apps) { AppAdvice.byCache(apps) }
             val sorted = remember(apps, showSystem) { AppAdvice.bySize(apps, showSystem) }
 
             Panel("Überblick") {
                 KeyValue("Apps mit Daten", "${apps.size} · ${vm.size(apps.sumOf { it.total })}")
                 KeyValue("davon Cache", vm.size(apps.sumOf { it.cacheBytes }))
+                KeyValue("davon selbst installiert", "${apps.count { !it.system }} · ${vm.size(apps.filter { !it.system }.sumOf { it.total })}")
                 vm.storage?.let { s -> KeyValue("Belegt insgesamt", vm.size(s.total - s.free)) }
                 OutlinedButton(onClick = { vm.loadApps() }, enabled = !vm.loadingApps) {
                     Text(if (vm.loadingApps) "Liest aus …" else "Neu auslesen")
+                }
+            }
+
+            Panel("Größter Cache") {
+                if (cache.isEmpty()) {
+                    Dim("Kein nennenswerter Cache.")
+                } else {
+                    Text("${cache.size} Apps · ${vm.size(cache.sumOf { it.cacheBytes })}", color = Accent)
+                    Dim("Cache leeren ist gefahrlos: Die App lädt bei Bedarf neu. Der Platz kann sich aber wieder füllen.", size = 12)
+                    cache.take(25).forEach { AppRow(vm, it, now, vm.size(it.cacheBytes)) }
                 }
             }
 
@@ -677,17 +690,16 @@ private fun AppsScreen(vm: MainViewModel) {
                     Dim("Keine größere App, die seit 60 Tagen ungenutzt ist.")
                 } else {
                     Text("${unused.size} Apps · ${vm.size(unused.sumOf { it.total })}", color = Accent)
-                    Dim("Selbst installiert, mindestens 50 MB, seit 60 Tagen nicht geöffnet. „Keine Nutzung aufgezeichnet“ kann auch ein Dienst im Hintergrund sein, etwa eine Tastatur.", size = 12)
+                    Dim("Selbst installiert, mindestens 50 MB, seit 60 Tagen nicht geöffnet.", size = 12)
                     unused.take(25).forEach { AppRow(vm, it, now, vm.size(it.total)) }
                 }
             }
 
-            Panel("Größter Cache") {
-                if (cache.isEmpty()) {
-                    Dim("Kein nennenswerter Cache.")
-                } else {
-                    Dim("Cache leeren ist gefahrlos: Die App lädt bei Bedarf neu. Der Platz kann sich aber wieder füllen.", size = 12)
-                    cache.take(15).forEach { AppRow(vm, it, now, vm.size(it.cacheBytes)) }
+            if (neverSeen.isNotEmpty()) {
+                Panel("Keine Nutzung aufgezeichnet") {
+                    Text("${neverSeen.size} Apps · ${vm.size(neverSeen.sumOf { it.total })}", color = TextMain)
+                    Dim("Für diese Apps kennt das System keinen Zeitpunkt. Das kann „nie geöffnet“ heißen – oder ein Dienst sein, der nur im Hintergrund läuft. Bitte einzeln prüfen.", size = 12)
+                    neverSeen.take(25).forEach { AppRow(vm, it, now, vm.size(it.total)) }
                 }
             }
 
