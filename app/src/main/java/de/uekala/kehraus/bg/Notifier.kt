@@ -42,6 +42,14 @@ object Notifier {
         )
     }
 
+    /** Erinnerung, wenn sich im Cache der Apps viel angesammelt hat. Leeren kann das nur der Nutzer. */
+    fun cacheHint(ctx: Context, cacheBytes: Long) {
+        show(
+            ctx, 3, "Viel App-Cache",
+            "Im Cache der Apps liegen ${size(ctx, cacheBytes)}. Im Reiter „Apps“ steht, wo sich das Leeren am meisten lohnt.",
+        )
+    }
+
     private fun show(ctx: Context, id: Int, title: String, text: String) {
         if (ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val nm = ctx.getSystemService(NotificationManager::class.java)

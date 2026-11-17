@@ -48,6 +48,10 @@ object Prefs {
     fun sortDownloads(ctx: Context): Boolean = sp(ctx).getBoolean("sortDownloads", false)
     fun setSortDownloads(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("sortDownloads", v).apply()
 
+    /** Wann zuletzt an einen vollen App-Cache erinnert wurde. */
+    fun cacheHintAt(ctx: Context): Long = sp(ctx).getLong("cacheHintAt", 0)
+    fun setCacheHintAt(ctx: Context, at: Long) = sp(ctx).edit().putLong("cacheHintAt", at).apply()
+
     // Schutzliste: volle Pfade von Ordnern und Dateien, die keine Regel anfasst.
     fun protection(ctx: Context): Protection {
         val p = sp(ctx)

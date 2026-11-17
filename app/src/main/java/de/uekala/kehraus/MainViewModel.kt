@@ -15,6 +15,8 @@ import de.uekala.kehraus.core.DownloadSorter
 import de.uekala.kehraus.core.DupGroup
 import de.uekala.kehraus.core.Duplicates
 import de.uekala.kehraus.core.HistoryEntry
+import de.uekala.kehraus.core.Orphan
+import de.uekala.kehraus.core.Orphans
 import de.uekala.kehraus.core.Hit
 import de.uekala.kehraus.core.Protection
 import de.uekala.kehraus.core.Report
@@ -67,6 +69,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var report by mutableStateOf<Report?>(null); private set
     var duplicates by mutableStateOf<List<DupGroup>?>(null); private set
 
+    /** Ordner unter Android/media, deren App nicht mehr installiert ist. */
+    var orphans by mutableStateOf<List<Orphan>>(emptyList()); private set
+
     /** Fortschrittstext, solange die Analyse läuft. */
     var analyzing by mutableStateOf<String?>(null); private set
 
@@ -96,9 +101,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         held = heldRules()
         history = runCatching { Storage.history(ctx).entries().take(30) }.getOrDefault(emptyList())
         // Nach der Rückkehr aus den Systemeinstellungen (Zugriff erteilt, Cache geleert, App entfernt) neu auslesen.
-        val hadUsageAccess = usageAccess
         usageAccess = Apps.hasUsageAccess(ctx)
-        if (usageAccess && (apps != null || !hadUsageAccess)) loadApps()
+        if (usageAccess) loadApps()
         if (!hasAccess) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -229,6 +233,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             gone = emptySet()
             report = r
             duplicates = null
+            orphans = if (r == null) emptyList() else withContext(Dispatchers.IO) {
+                runCatching { Orphans.find(r, Apps.installed(ctx)) }.getOrDefault(emptyList())
+            }
             if (r == null) {
                 message = "Analyse fehlgeschlagen"
             } else {
@@ -259,6 +266,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         gone = gone + moved
         if (moved.size == paths.size) "${files(moved.size)} (${size(bytes)}) in den Papierkorb verschoben"
         else "${moved.size} von ${paths.size} verschoben"
+    }
+
+    /** Legt den ganzen Ordner einer nicht mehr installierten App in den Papierkorb. */
+    fun trashOrphan(orphan: Orphan) {
+        val r = report ?: return
+        trashFiles(Orphans.filesOf(r, orphan).map { it.path }, ORPHAN)
     }
 
     // ---------- Schutzliste ----------
@@ -326,5 +339,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         /** Herkunft im Papierkorb für Dateien, die keine Regel verschoben hat. */
         const val MANUAL = "MANUAL"
         const val DUPLICATE = "DUPLICATE"
+        const val ORPHAN = "ORPHAN"
     }
 }

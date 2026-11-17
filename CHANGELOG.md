@@ -14,3 +14,6 @@
 - Apps: Größe, Cache und letzte Nutzung; lange nicht genutzte Apps als Vorschlag
 - Downloads nach Art in Unterordner sortieren, mit Zurücknehmen
 - Installationsdateien werden im ganzen Gerätespeicher gefunden
+- Apps-Reiter: Vorschlag ohne vorinstallierte Apps, größter Cache zuerst
+- Reste entfernter Apps in der Analyse
+- Erinnerung bei viel App-Cache, Cache-Summe auf der Übersicht
