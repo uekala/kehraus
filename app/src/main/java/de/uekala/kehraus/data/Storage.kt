@@ -8,10 +8,14 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
 import de.uekala.kehraus.core.Engine
+import de.uekala.kehraus.core.History
 import de.uekala.kehraus.core.Trash
 import java.io.File
 
-data class StorageInfo(val free: Long, val total: Long)
+data class StorageInfo(val free: Long, val total: Long) {
+    /** Weniger als ein Zehntel frei. */
+    val low: Boolean get() = total > 0 && free < total / 10
+}
 
 /** Zugang zum Gerätespeicher. */
 object Storage {
@@ -19,6 +23,11 @@ object Storage {
 
     fun trash(): Trash = Trash(File(root, "Kehraus/Papierkorb"))
     fun engine(): Engine = Engine(root, trash())
+
+    fun history(ctx: Context): History = History(File(ctx.filesDir, "verlauf.tsv"))
+
+    /** Pfad ohne den Gerätespeicher davor, zur Anzeige. */
+    fun relative(path: String): String = path.removePrefix(root.absolutePath).trimStart('/').ifEmpty { "Gerätespeicher" }
 
     fun hasAccess(): Boolean = Environment.isExternalStorageManager()
 

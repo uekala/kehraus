@@ -67,6 +67,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.uekala.kehraus.MainViewModel
 import de.uekala.kehraus.MainViewModel.Companion.files
+import de.uekala.kehraus.core.Group
+import de.uekala.kehraus.core.HistoryEntry
 import de.uekala.kehraus.core.Kind
 import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
@@ -91,6 +93,9 @@ private fun days(n: Int): String = when (n) {
 }
 
 private fun megabytes(n: Int): String = if (n >= 1000) "${n / 1000} GB" else "$n MB"
+
+/** Titel einer Regel mit ihrer Gruppe davor, wo der Titel allein nicht eindeutig wäre. */
+private val RuleId.fullTitle: String get() = if (group == Group.WHATSAPP) "WhatsApp · $title" else title
 
 private fun dateTime(ms: Long): String = SimpleDateFormat("dd.MM.yyyy, HH:mm", Locale.GERMANY).format(Date(ms))
 
@@ -131,6 +136,27 @@ fun App(vm: MainViewModel) {
             }
         }
     }
+
+    val ask = vm.askHeld
+    if (ask.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissHeld() },
+            title = { Text("Ungewöhnlich viel auf einmal") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Diese Regeln wurden angehalten, weil sie sehr viel verschieben würden:")
+                    ask.forEach { r ->
+                        Text("${r.id.fullTitle}: ${files(r.heldCount)} · ${vm.size(r.heldBytes)}", color = TextMain, fontWeight = FontWeight.Medium)
+                    }
+                    Dim("Alles landet im Papierkorb und lässt sich bis zum Ablauf der Frist zurücklegen. Unter „Regeln“ kannst du vorher ansehen, was getroffen wird.", size = 13)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.runNow(confirmed = ask.map { it.id }.toSet()) }) { Text("Ausführen") }
+            },
+            dismissButton = { TextButton(onClick = { vm.dismissHeld() }) { Text("Nicht jetzt") } },
+        )
+    }
 }
 
 // ---------- Übersicht ----------
@@ -164,6 +190,20 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
                     color = if (used > 0.9f) Warn else Accent,
                     trackColor = Track,
                 )
+                if (s.low) {
+                    Text(
+                        if (vm.trashBytes > 0) "Der Speicher wird knapp. Im Papierkorb liegen ${vm.size(vm.trashBytes)} – leeren schafft sofort Platz."
+                        else "Der Speicher wird knapp.",
+                        color = Warn, fontSize = 13.sp,
+                    )
+                }
+            }
+        }
+
+        if (vm.held.isNotEmpty() && vm.askHeld.isEmpty()) {
+            Panel("Wartet auf dich") {
+                Dim("Angehalten, weil ungewöhnlich viel getroffen würde: ${vm.held.joinToString(", ") { it.fullTitle }}.")
+                OutlinedButton(onClick = { vm.runNow() }, enabled = vm.hasAccess && !vm.busy) { Text("Prüfen") }
             }
         }
 
@@ -205,6 +245,33 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
             SwitchRow("Täglich aufräumen", "Einmal am Tag im Hintergrund, nicht bei schwachem Akku.", vm.auto) { vm.updateAuto(it) }
             SwitchRow("Melden, wenn etwas passiert ist", null, vm.notify) { vm.updateNotify(it) }
         }
+
+        if (vm.history.isNotEmpty()) {
+            Panel("Verlauf") {
+                vm.history.take(12).forEach { e ->
+                    Column {
+                        Text(historyTitle(e), color = TextMain, fontSize = 14.sp)
+                        Dim("${dateTime(e.at)} · ${historyDetail(vm, e)}", size = 12)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun historyTitle(e: HistoryEntry): String = when (e.what) {
+    HistoryEntry.PURGED -> "Papierkorb: Frist abgelaufen"
+    HistoryEntry.EMPTY_DIRS -> "Leere Ordner"
+    else -> ruleTitle(e.what)
+}
+
+private fun historyDetail(vm: MainViewModel, e: HistoryEntry): String = when {
+    e.what == HistoryEntry.PURGED -> "${files(e.count)} endgültig gelöscht · ${vm.size(e.bytes)}"
+    e.what == HistoryEntry.EMPTY_DIRS -> "${e.count} entfernt"
+    e.held -> "angehalten bei ${files(e.count)} · ${vm.size(e.bytes)}"
+    else -> buildString {
+        append("${files(e.count)} verschoben · ${vm.size(e.bytes)}")
+        if (e.failed > 0) append(" · ${e.failed} fehlgeschlagen")
     }
 }
 
@@ -213,15 +280,94 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
 @Composable
 private fun RulesScreen(vm: MainViewModel) {
     var showHits by remember { mutableStateOf<RuleId?>(null) }
+    var pickFolder by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Heading("Regeln")
         Dim("Eingeschaltete Regeln verschieben ihre Treffer in den Papierkorb – beim täglichen Lauf oder über „Jetzt aufräumen“.")
-        vm.rules.forEach { rule -> RuleCard(vm, rule) { showHits = rule.id } }
+        Group.entries.forEach { group ->
+            SectionTitle(group.title)
+            vm.rules.filter { it.id.group == group }.forEach { rule -> RuleCard(vm, rule) { showHits = rule.id } }
+        }
+
+        SectionTitle("Weitere Aufgaben")
+        Panel {
+            SwitchRow(
+                "Leere Ordner entfernen",
+                "In Download, Pictures, DCIM, Movies, Documents und Music. Leere Ordner werden direkt gelöscht, nicht in den Papierkorb gelegt.",
+                vm.emptyDirs,
+            ) { vm.updateEmptyDirs(it) }
+        }
+
+        SectionTitle("Schutzliste")
+        Panel {
+            Dim("Was hier steht, fasst keine Regel an – bei Ordnern gilt das für alles darunter.", size = 13)
+            val guarded = vm.protection.folders.sorted().map { it to true } + vm.protection.files.sorted().map { it to false }
+            if (guarded.isEmpty()) Dim("Noch nichts geschützt.")
+            guarded.forEach { (path, isFolder) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(Storage.relative(path), color = TextMain, fontSize = 14.sp)
+                        Dim(if (isFolder) "Ordner" else "Datei", size = 12)
+                    }
+                    TextButton(onClick = { vm.unprotect(path) }) { Text("Entfernen") }
+                }
+            }
+            OutlinedButton(onClick = { pickFolder = true }, enabled = vm.hasAccess) { Text("Ordner schützen") }
+        }
     }
     showHits?.let { id -> HitsDialog(vm, id) { showHits = null } }
+    if (pickFolder) {
+        FolderPicker(
+            onPick = { vm.protectFolder(it.absolutePath); pickFolder = false },
+            onClose = { pickFolder = false },
+        )
+    }
+}
+
+/** Kleiner Ordner-Browser: durch den Gerätespeicher blättern und einen Ordner auswählen. */
+@Composable
+private fun FolderPicker(onPick: (File) -> Unit, onClose: () -> Unit) {
+    val root = remember { Storage.root }
+    var dir by remember { mutableStateOf(root) }
+    val children by produceState(emptyList<File>(), dir) {
+        value = withContext(Dispatchers.IO) {
+            dir.listFiles().orEmpty().filter { it.isDirectory && !it.name.startsWith(".") }.sortedBy { it.name.lowercase() }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Ordner schützen") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Dim(Storage.relative(dir.absolutePath), size = 13)
+                LazyColumn(Modifier.heightIn(max = 340.dp)) {
+                    if (dir != root) {
+                        item { PickerRow("‹ zurück", TextDim) { dir = dir.parentFile ?: root } }
+                    }
+                    items(children) { child -> PickerRow(child.name, TextMain) { dir = child } }
+                    if (children.isEmpty()) item { Dim("Keine Unterordner.", Modifier.padding(vertical = 10.dp), size = 13) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onPick(dir) }, enabled = dir != root) { Text("Diesen Ordner schützen") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("Abbrechen") } },
+    )
+}
+
+@Composable
+private fun PickerRow(text: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    Text(
+        text,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+    )
 }
 
 @Composable
@@ -260,14 +406,18 @@ private fun HitsDialog(vm: MainViewModel, id: RuleId, onClose: () -> Unit) {
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = { TextButton(onClick = onClose) { Text("Schließen") } },
-        title = { Text(id.title) },
+        title = { Text(id.fullTitle) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(p?.hits.orEmpty()) { hit ->
-                    Column {
-                        Text(hit.file.name, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        val age = ((now - hit.modified) / Rules.DAY_MS).toInt()
-                        Dim("${vm.size(hit.size)} · ${days(age)} alt · ${hit.file.parentFile?.name.orEmpty()}", size = 12)
+                item { Dim("„Schützen“ nimmt eine Datei dauerhaft von allen Regeln aus.", size = 12) }
+                items(p?.hits.orEmpty(), key = { it.file.path }) { hit ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(hit.file.name, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val age = ((now - hit.modified) / Rules.DAY_MS).toInt()
+                            Dim("${vm.size(hit.size)} · ${days(age)} alt · ${hit.file.parentFile?.name.orEmpty()}", size = 12)
+                        }
+                        TextButton(onClick = { vm.protectFile(hit.file.absolutePath) }) { Text("Schützen") }
                     }
                 }
                 if (p != null && p.count > p.hits.size) {
@@ -342,6 +492,9 @@ private fun TrashScreen(vm: MainViewModel) {
                     Thumb(store.fileOf(e), e.name, 220)
                     Dim(e.original, size = 12)
                     Dim("Verschoben am ${dateTime(e.trashedAt)} · ${ruleTitle(e.rule)} · ${vm.size(e.size)}", size = 12)
+                    TextButton(onClick = { vm.restore(listOf(e.id), protect = true); selected = null }) {
+                        Text("Zurücklegen und künftig schützen")
+                    }
                 }
             },
             confirmButton = {
@@ -370,7 +523,7 @@ private fun TrashScreen(vm: MainViewModel) {
 
 private fun folderOf(e: TrashEntry): String = File(e.original).parentFile?.name ?: "–"
 
-private fun ruleTitle(name: String): String = RuleId.entries.firstOrNull { it.name == name }?.title ?: name
+private fun ruleTitle(name: String): String = RuleId.entries.firstOrNull { it.name == name }?.fullTitle ?: name
 
 private fun remaining(e: TrashEntry, retentionDays: Int, now: Long): String {
     val left = e.expiresAt(retentionDays) - now
@@ -384,6 +537,11 @@ private fun remaining(e: TrashEntry, retentionDays: Int, now: Long): String {
 @Composable
 private fun Heading(text: String) {
     Text(text, color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, color = TextDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
 }
 
 @Composable

@@ -38,6 +38,9 @@ class EngineTest {
         return f
     }
 
+    private fun Engine.run(rules: List<RuleConfig>, retention: Int, at: Long) =
+        run(rules, RunOptions(retentionDays = retention), at)
+
     private fun on(id: RuleId, ageDays: Int = id.defaultAgeDays, minSizeMb: Int = id.defaultMinSizeMb) =
         RuleConfig(id, enabled = true, ageDays = ageDays, minSizeMb = minSizeMb)
 
@@ -212,7 +215,178 @@ class EngineTest {
     fun `Dateityp wird an der Endung erkannt`() {
         assertEquals(Kind.IMAGE, Rules.kindOf("IMG.JPG"))
         assertEquals(Kind.VIDEO, Rules.kindOf("clip.mp4"))
+        assertEquals(Kind.AUDIO, Rules.kindOf("PTT-1.opus"))
         assertEquals(Kind.OTHER, Rules.kindOf("ohne-endung"))
         assertEquals(Kind.OTHER, Rules.kindOf("archiv.tar.gz"))
+    }
+
+    // ---------- Paket A ----------
+
+    private val wa = "Android/media/com.whatsapp/WhatsApp/Media"
+
+    @Test
+    fun `gesendete Kopien trifft nur den Ordner Sent`() {
+        val sent = file("$wa/WhatsApp Images/Sent/IMG-1.jpg", 20)
+        val sentDoc = file("$wa/WhatsApp Documents/Sent/angebot.pdf", 20)
+        val received = file("$wa/WhatsApp Images/IMG-2.jpg", 20)
+        val fresh = file("$wa/WhatsApp Video/Sent/VID-1.mp4", 3)
+
+        val result = engine.run(listOf(on(RuleId.WHATSAPP_SENT)), 30, now)
+
+        assertEquals(2, result.moved)
+        assertFalse(sent.exists() || sentDoc.exists())
+        assertTrue(received.exists() && fresh.exists())
+    }
+
+    @Test
+    fun `Sprachnachrichten trifft nur Audio auch in Wochenordnern`() {
+        val voice = file("$wa/WhatsApp Voice Notes/202601/PTT-1.opus", 120)
+        val audio = file("$wa/WhatsApp Audio/AUD-1.m4a", 120)
+        val image = file("$wa/WhatsApp Images/IMG-1.jpg", 120)
+
+        val result = engine.run(listOf(on(RuleId.WHATSAPP_VOICE)), 30, now)
+
+        assertEquals(2, result.moved)
+        assertFalse(voice.exists() || audio.exists())
+        assertTrue(image.exists())
+    }
+
+    @Test
+    fun `Installationsdateien trifft nur APKs`() {
+        val apk = file("Download/app-release.APK", 10)
+        val pdf = file("Download/rechnung.pdf", 10)
+        val young = file("Download/neu.apk", 2)
+
+        val result = engine.run(listOf(on(RuleId.APKS)), 30, now)
+
+        assertEquals(1, result.moved)
+        assertFalse(apk.exists())
+        assertTrue(pdf.exists() && young.exists())
+    }
+
+    @Test
+    fun `Telegram trifft alle Dateiarten in seinen Ordnern`() {
+        val img = file("Pictures/Telegram/IMG_1.jpg", 90)
+        val doc = file("Android/media/org.telegram.messenger/Telegram/Telegram Documents/a.pdf", 90)
+        val other = file("Pictures/Urlaub/IMG_2.jpg", 900)
+
+        val result = engine.run(listOf(on(RuleId.TELEGRAM)), 30, now)
+
+        assertEquals(2, result.moved)
+        assertFalse(img.exists() || doc.exists())
+        assertTrue(other.exists())
+    }
+
+    @Test
+    fun `Schutzliste hält Ordner mit Unterordnern und einzelne Dateien heraus`() {
+        val safeDir = file("Download/Steuer/2025/bescheid.pdf", 400)
+        val safeFile = file("Download/vertrag.pdf", 400)
+        val normal = file("Download/alt.zip", 400)
+        val protection = Protection(
+            folders = setOf(File(root, "Download/Steuer").absolutePath),
+            files = setOf(safeFile.absolutePath),
+        )
+
+        assertEquals(listOf(normal.absolutePath), engine.preview(on(RuleId.DOWNLOADS), now, protection).map { it.file.absolutePath })
+        val result = engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(protection = protection), now)
+
+        assertEquals(1, result.moved)
+        assertTrue(safeDir.exists() && safeFile.exists())
+        assertFalse(normal.exists())
+    }
+
+    @Test
+    fun `ein geschützter Ablageort schützt alles darunter`() {
+        val f = file("Download/alt.zip", 400)
+        val protection = Protection(folders = setOf(File(root, "Download").absolutePath))
+        assertEquals(0, engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(protection = protection), now).moved)
+        assertTrue(f.exists())
+    }
+
+    @Test
+    fun `Notbremse hält eine Regel an bis sie bestätigt ist`() {
+        val files = (1..4).map { file("Download/alt-$it.bin", 400, bytes = 5) }
+        val options = RunOptions(brake = Brake(maxFiles = 3))
+
+        val held = engine.run(listOf(on(RuleId.DOWNLOADS)), options, now)
+
+        assertEquals(0, held.moved)
+        assertEquals(listOf(RuleId.DOWNLOADS), held.held.map { it.id })
+        assertEquals(4, held.held.single().heldCount)
+        assertEquals(20L, held.held.single().heldBytes)
+        assertTrue(files.all { it.exists() })
+
+        val confirmed = engine.run(listOf(on(RuleId.DOWNLOADS)), options.copy(confirmed = setOf(RuleId.DOWNLOADS)), now)
+
+        assertEquals(4, confirmed.moved)
+        assertTrue(confirmed.held.isEmpty())
+    }
+
+    @Test
+    fun `Notbremse greift auch bei zu vielen Bytes und lässt kleine Mengen durch`() {
+        file("Download/a.bin", 400, bytes = 600)
+        file("Download/b.bin", 400, bytes = 600)
+        assertTrue(engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 10, maxBytes = 1000)), now).held.isNotEmpty())
+        assertEquals(2, engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 10, maxBytes = 1200)), now).moved)
+    }
+
+    @Test
+    fun `leere Ordner verschwinden von unten nach oben und Ablageorte bleiben`() {
+        File(root, "Download/leer/tiefer/noch-tiefer").mkdirs()
+        File(root, "Pictures/Screenshots").mkdirs()
+        File(root, "DCIM/Camera").mkdirs()
+        File(root, "Documents").mkdirs()
+        File(root, "Movies/.versteckt").mkdirs()
+        val used = file("Download/belegt/datei.txt", 1)
+        val nomedia = file("Pictures/Album/.nomedia", 1)
+        val guarded = File(root, "Download/geschuetzt").apply { mkdirs() }
+        val protection = Protection(folders = setOf(guarded.absolutePath))
+
+        val result = engine.run(emptyList(), RunOptions(removeEmptyDirs = true, protection = protection), now)
+
+        assertEquals(3, result.emptyDirs)
+        assertFalse(File(root, "Download/leer").exists())
+        assertTrue(File(root, "Download").isDirectory && File(root, "Documents").isDirectory)
+        assertTrue(File(root, "Pictures/Screenshots").isDirectory && File(root, "DCIM/Camera").isDirectory)
+        assertTrue(File(root, "Movies/.versteckt").isDirectory)
+        assertTrue(used.exists() && nomedia.exists() && guarded.isDirectory)
+    }
+
+    @Test
+    fun `leere Ordner bleiben ohne den Schalter liegen`() {
+        File(root, "Download/leer").mkdirs()
+        assertEquals(0, engine.run(emptyList(), RunOptions(), now).emptyDirs)
+        assertTrue(File(root, "Download/leer").isDirectory)
+    }
+
+    @Test
+    fun `Verlauf merkt sich nur Läufe in denen etwas passiert ist`() {
+        val history = History(File(root, "app/verlauf.tsv"), keep = 3)
+        history.record(engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now))
+        assertTrue(history.entries().isEmpty())
+
+        file("Download/a.bin", 400, bytes = 9)
+        history.record(engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now))
+        assertEquals(listOf(HistoryEntry(now, "DOWNLOADS", 1, 9)), history.entries())
+
+        history.record(engine.run(emptyList(), 30, now + 40 * day))
+        assertEquals(HistoryEntry(now + 40 * day, HistoryEntry.PURGED, 1, 9), history.entries().first())
+    }
+
+    @Test
+    fun `Verlauf hält angehaltene Regeln fest und behält nur die letzten Zeilen`() {
+        val history = History(File(root, "app/verlauf.tsv"), keep = 3)
+        repeat(5) { i ->
+            file("Download/x-$i.bin", 400)
+            file("Download/y-$i.bin", 400)
+            history.record(engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 1)), now + i))
+        }
+        val entries = history.entries()
+        assertEquals(3, entries.size)
+        assertTrue(entries.all { it.held })
+        assertEquals(now + 4, entries.first().at)
+        assertEquals(10, entries.first().count)
+        assertEquals(entries.first(), History.parse(History.format(entries.first())))
+        assertNull(History.parse("kaputt"))
     }
 }

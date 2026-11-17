@@ -8,6 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import de.uekala.kehraus.data.Prefs
+import de.uekala.kehraus.data.Storage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
@@ -23,7 +24,13 @@ class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
         } catch (e: Exception) {
             return@withContext Result.retry()
         }
-        if (result != null && Prefs.notify(ctx)) Notifier.report(ctx, result)
+        if (result != null && Prefs.notify(ctx)) {
+            Notifier.report(ctx, result)
+            runCatching {
+                val info = Storage.info()
+                if (info != null) Notifier.lowStorage(ctx, info, Storage.trash().entries().sumOf { it.size })
+            }
+        }
         Result.success()
     }
 

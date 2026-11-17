@@ -9,9 +9,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.uekala.kehraus.bg.CleanWorker
 import de.uekala.kehraus.bg.Runner
+import de.uekala.kehraus.core.HistoryEntry
 import de.uekala.kehraus.core.Hit
+import de.uekala.kehraus.core.Protection
 import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
+import de.uekala.kehraus.core.RuleResult
 import de.uekala.kehraus.core.TrashEntry
 import de.uekala.kehraus.data.LastRun
 import de.uekala.kehraus.data.Prefs
@@ -31,31 +34,48 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var rules by mutableStateOf(Prefs.rules(app)); private set
     var previews by mutableStateOf<Map<RuleId, Preview>>(emptyMap()); private set
     var trash by mutableStateOf<List<TrashEntry>>(emptyList()); private set
+    var history by mutableStateOf<List<HistoryEntry>>(emptyList()); private set
     var storage by mutableStateOf<StorageInfo?>(null); private set
+    var protection by mutableStateOf(Prefs.protection(app)); private set
     var retentionDays by mutableStateOf(Prefs.retentionDays(app)); private set
     var auto by mutableStateOf(Prefs.auto(app)); private set
     var notify by mutableStateOf(Prefs.notify(app)); private set
+    var emptyDirs by mutableStateOf(Prefs.emptyDirs(app)); private set
     var lastRun by mutableStateOf<LastRun?>(Prefs.lastRun(app)); private set
     var totalFreed by mutableStateOf(Prefs.totalFreed(app)); private set
+
+    /** Regeln, die beim letzten Lauf wegen der Menge angehalten wurden. */
+    var held by mutableStateOf(heldRules()); private set
+
+    /** Gesetzt, solange die App fragt, ob angehaltene Regeln trotzdem laufen sollen. */
+    var askHeld by mutableStateOf<List<RuleResult>>(emptyList()); private set
+
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null)
 
     val trashBytes: Long get() = trash.sumOf { it.size }
 
+    private fun heldRules(): List<RuleId> {
+        val names = Prefs.held(ctx)
+        return RuleId.entries.filter { it.name in names }
+    }
+
     fun refresh() {
         hasAccess = Storage.hasAccess()
         lastRun = Prefs.lastRun(ctx)
         totalFreed = Prefs.totalFreed(ctx)
+        held = heldRules()
+        history = runCatching { Storage.history(ctx).entries().take(30) }.getOrDefault(emptyList())
         if (!hasAccess) return
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val current = rules
+            val guard = protection
             val (t, s, p) = withContext(Dispatchers.IO) {
-                val engine = Storage.engine()
                 Triple(
-                    runCatching { engine.trash.entries() }.getOrDefault(emptyList()),
+                    runCatching { Storage.trash().entries() }.getOrDefault(emptyList()),
                     Storage.info(),
-                    current.associate { it.id to preview(it, now) },
+                    current.associate { it.id to preview(it, now, guard) },
                 )
             }
             trash = t
@@ -64,8 +84,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun preview(rule: RuleConfig, now: Long): Preview {
-        val hits = runCatching { Storage.engine().preview(rule, now) }.getOrDefault(emptyList())
+    private fun preview(rule: RuleConfig, now: Long, guard: Protection): Preview {
+        val hits = runCatching { Storage.engine().preview(rule, now, guard) }.getOrDefault(emptyList())
         return Preview(hits.size, hits.sumOf { it.size }, hits.sortedByDescending { it.size }.take(200))
     }
 
@@ -73,37 +93,54 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         Prefs.setRule(ctx, c)
         rules = Prefs.rules(ctx)
         if (!hasAccess) return
+        val guard = protection
         viewModelScope.launch {
-            val p = withContext(Dispatchers.IO) { preview(c, System.currentTimeMillis()) }
+            val p = withContext(Dispatchers.IO) { preview(c, System.currentTimeMillis(), guard) }
             previews = previews + (c.id to p)
         }
     }
 
-    fun runNow() {
+    /** [confirmed]: Regeln, die trotz großer Menge laufen sollen. */
+    fun runNow(confirmed: Set<RuleId> = emptySet()) {
         if (busy) return
         busy = true
+        askHeld = emptyList()
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { Runner.run(ctx) } }
+            val result = withContext(Dispatchers.IO) { runCatching { Runner.run(ctx, confirmed) } }
             busy = false
             val r = result.getOrNull()
             message = when {
                 result.isFailure -> "Aufräumen fehlgeschlagen: ${result.exceptionOrNull()?.message ?: "unbekannter Fehler"}"
                 r == null -> "Erst den Dateizugriff erlauben"
-                r.moved == 0 && r.failed == 0 -> "Nichts zu tun"
+                r.held.isNotEmpty() && r.moved == 0 -> null
+                r.moved == 0 && r.failed == 0 && r.emptyDirs == 0 -> "Nichts zu tun"
                 else -> buildString {
                     append("${files(r.moved)} (${size(r.movedBytes)}) in den Papierkorb verschoben")
+                    if (r.emptyDirs > 0) append(" · ${r.emptyDirs} leere Ordner entfernt")
                     if (r.failed > 0) append(" · ${files(r.failed)} ließen sich nicht verschieben")
                 }
             }
+            if (r != null) askHeld = r.held
             refresh()
         }
     }
 
-    fun restore(ids: List<String>) = trashAction {
-        val restored = ids.mapNotNull { Storage.trash().restore(it) }
+    fun dismissHeld() {
+        askHeld = emptyList()
+    }
+
+    fun restore(ids: List<String>, protect: Boolean = false) = trashAction {
+        val store = Storage.trash()
+        val restored = ids.mapNotNull { store.restore(it) }
         Storage.rescan(ctx, restored.map { it.absolutePath })
-        if (restored.size == ids.size) "${files(restored.size)} wiederhergestellt"
-        else "${restored.size} von ${ids.size} wiederhergestellt"
+        if (protect && restored.isNotEmpty()) {
+            saveProtection(protection.copy(files = protection.files + restored.map { it.absolutePath }))
+        }
+        when {
+            restored.size != ids.size -> "${restored.size} von ${ids.size} wiederhergestellt"
+            protect -> "Zurückgelegt und geschützt"
+            else -> "${files(restored.size)} zurückgelegt"
+        }
     }
 
     fun delete(ids: List<String>) = trashAction {
@@ -125,6 +162,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- Schutzliste ----------
+
+    private fun saveProtection(p: Protection) {
+        Prefs.setProtection(ctx, p)
+        protection = p
+    }
+
+    fun protectFolder(path: String) {
+        saveProtection(protection.copy(folders = protection.folders + path))
+        refresh()
+    }
+
+    fun protectFile(path: String) {
+        saveProtection(protection.copy(files = protection.files + path))
+        refresh()
+    }
+
+    fun unprotect(path: String) {
+        saveProtection(Protection(protection.folders - path, protection.files - path))
+        refresh()
+    }
+
+    // ---------- Einstellungen ----------
+
     fun updateRetention(days: Int) {
         retentionDays = days
         Prefs.setRetentionDays(ctx, days)
@@ -139,6 +200,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun updateNotify(v: Boolean) {
         notify = v
         Prefs.setNotify(ctx, v)
+    }
+
+    fun updateEmptyDirs(v: Boolean) {
+        emptyDirs = v
+        Prefs.setEmptyDirs(ctx, v)
     }
 
     fun size(bytes: Long): String = Formatter.formatShortFileSize(ctx, bytes)
