@@ -69,8 +69,18 @@ die Tests dazu stehen in `app/src/test`.
 vorherige Version installieren lassen. Bevor das Repo öffentlich wird, gehört der Schlüssel
 in ein GitHub-Secret.
 
+## Analyse
+
+Der Reiter *Analyse* zeigt, wo der Platz hingeht: nach Dateiart, Ordner für Ordner zum Durchklicken
+und als Liste der größten Dateien. Jede Datei lässt sich von dort in den Papierkorb legen oder schützen.
+Apps und ihre Daten zählen nicht mit, darauf hat die App keinen Zugriff.
+
+Exakte Duplikate (Inhalt Byte für Byte gleich) werden in Gruppen angezeigt. Es bleibt die Datei am
+besten Platz – Kameraordner vor Bilderordnern vor Downloads vor Messenger-Ordnern, bei Gleichstand die
+ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb; automatisch passiert hier nichts.
+
 ## Geplant
 
-- Speicher-Analyse, doppelte und ähnliche Fotos
+- Ähnliche Fotos und Serienbilder, unscharfe Bilder
 - Fotos und Downloads nach Regeln in Ordner sortieren
 - Ungenutzte Apps auflisten

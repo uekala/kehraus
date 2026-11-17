@@ -32,8 +32,10 @@ class Trash(val dir: File) {
 
     fun fileOf(e: TrashEntry): File = File(filesDir, storedName(e.id, e.original))
 
-    /** Alle Einträge, deren Datei wirklich im Papierkorb liegt. Neueste zuerst. */
-    fun entries(): List<TrashEntry> = synchronized(LOCK) { load().sortedByDescending { it.trashedAt } }
+    /** Alle Einträge, deren Datei wirklich im Papierkorb liegt. Neueste zuerst, bei gleichem Zeitpunkt nach Name. */
+    fun entries(): List<TrashEntry> = synchronized(LOCK) {
+        load().sortedWith(compareByDescending<TrashEntry> { it.trashedAt }.thenBy { it.name.lowercase() })
+    }
 
     /**
      * Verschiebt [file] in den Papierkorb. Liefert null, wenn das nicht geklappt hat –

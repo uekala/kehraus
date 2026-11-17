@@ -9,3 +9,5 @@
 - Leere Ordner entfernen
 - Schutzliste für Ordner und einzelne Dateien
 - Notbremse bei ungewöhnlich großen Mengen, Verlauf, Hinweis bei knappem Speicher
+- Analyse: Speicher nach Dateiart und Ordner, größte Dateien, exakte Duplikate
+- Papierkorb nach Zeitpunkt und Name sortiert
