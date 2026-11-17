@@ -7,6 +7,8 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import de.uekala.kehraus.core.Rules
+import de.uekala.kehraus.data.Apps
 import de.uekala.kehraus.data.Prefs
 import de.uekala.kehraus.data.Storage
 import kotlinx.coroutines.Dispatchers
@@ -31,10 +33,23 @@ class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
                 if (info != null) Notifier.lowStorage(ctx, info, Storage.trash().entries().sumOf { it.size })
             }
         }
+        if (Prefs.notify(ctx)) runCatching { remindCache(ctx) }
         Result.success()
     }
 
+    /** Höchstens einmal pro Woche, und nur wenn wirklich viel zusammengekommen ist. */
+    private fun remindCache(ctx: Context) {
+        val now = System.currentTimeMillis()
+        if (!Apps.hasUsageAccess(ctx) || now - Prefs.cacheHintAt(ctx) < 7 * Rules.DAY_MS) return
+        val cache = Apps.load(ctx).sumOf { it.cacheBytes }
+        if (cache < CACHE_HINT_BYTES) return
+        Notifier.cacheHint(ctx, cache)
+        Prefs.setCacheHintAt(ctx, now)
+    }
+
     companion object {
+        private const val CACHE_HINT_BYTES = 5L * 1024 * 1024 * 1024
+
         private const val NAME = "kehraus-taeglich"
 
         /** Stellt den täglichen Lauf ein oder ab, je nach Einstellung. */

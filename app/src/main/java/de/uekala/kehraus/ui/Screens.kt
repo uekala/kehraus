@@ -144,7 +144,7 @@ fun App(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> Overview(vm, onOpenRules = { tab = 1 })
+                0 -> Overview(vm, onOpenRules = { tab = 1 }, onOpenApps = { tab = 3 })
                 1 -> RulesScreen(vm)
                 2 -> AnalysisScreen(vm)
                 3 -> AppsScreen(vm)
@@ -178,13 +178,26 @@ fun App(vm: MainViewModel) {
 // ---------- Übersicht ----------
 
 @Composable
-private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
+private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () -> Unit) {
     val ctx = LocalContext.current
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Heading("Kehraus")
+
+        vm.apps?.let { apps ->
+            val cache = apps.sumOf { it.cacheBytes }
+            if (cache >= 1024L * 1024 * 1024) {
+                Panel("App-Cache") {
+                    KeyValue("Im Cache der Apps", vm.size(cache))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dim("Leeren kann den nur Android selbst, App für App.", Modifier.weight(1f), size = 12)
+                        TextButton(onClick = onOpenApps) { Text("Apps") }
+                    }
+                }
+            }
+        }
 
         if (!vm.hasAccess) {
             Panel("Zugriff nötig") {
@@ -513,6 +526,22 @@ private fun AnalysisScreen(vm: MainViewModel) {
             }
 
             DuplicatesPanel(vm) { confirmAll = true }
+
+            val orphans = vm.orphans.filter { o -> vm.gone.none { it.startsWith(o.path + "/") } }
+            if (orphans.isNotEmpty()) {
+                Panel("Reste entfernter Apps") {
+                    Dim("Ordner von Apps, die nicht mehr installiert sind. Bitte kurz prüfen – Apps aus einem zweiten Profil (Arbeitsprofil, App-Klon) erkennt Kehraus nicht als installiert.", size = 12)
+                    orphans.forEach { o ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(o.pkg, color = TextMain, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Dim("${files(o.usage.files)} · ${vm.size(o.usage.bytes)}", size = 12)
+                            }
+                            TextButton(onClick = { vm.trashOrphan(o) }, enabled = !vm.busy) { Text("Weg") }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -832,6 +861,7 @@ private fun folderOf(e: TrashEntry): String = File(e.original).parentFile?.name 
 private fun ruleTitle(name: String): String = when (name) {
     MainViewModel.MANUAL -> "von Hand"
     MainViewModel.DUPLICATE -> "Duplikat"
+    MainViewModel.ORPHAN -> "Rest einer entfernten App"
     else -> RuleId.entries.firstOrNull { it.name == name }?.fullTitle ?: name
 }
 

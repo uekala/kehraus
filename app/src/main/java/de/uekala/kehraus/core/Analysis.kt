@@ -202,3 +202,27 @@ object Duplicates {
         null
     }
 }
+
+/** Ein Ordner unter `Android/media`, dessen App nicht mehr installiert ist. */
+data class Orphan(val pkg: String, val path: String, val usage: Usage)
+
+object Orphans {
+    private const val MEDIA = "Android/media"
+
+    /**
+     * Ordner unter `Android/media`, die wie ein App-Paket heißen, aber zu keiner installierten App gehören.
+     * Ist die Liste der installierten Apps verdächtig kurz, wird nichts gemeldet – dann stimmt eher die
+     * Liste nicht, als dass alle Apps fehlen.
+     */
+    fun find(report: Report, installed: Set<String>): List<Orphan> {
+        if (installed.size < 20) return emptyList()
+        val media = report.root + "/" + MEDIA
+        return report.subfolders(media)
+            .map { (path, usage) -> Orphan(path.substringAfterLast('/'), path, usage) }
+            .filter { '.' in it.pkg && !it.pkg.startsWith(".") && it.pkg !in installed && it.usage.files > 0 }
+    }
+
+    /** Alle Dateien eines solchen Ordners. */
+    fun filesOf(report: Report, orphan: Orphan): List<FileInfo> =
+        report.files.filter { it.path.startsWith(orphan.path + "/") }
+}

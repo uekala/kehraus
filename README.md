@@ -83,12 +83,15 @@ Exakte Duplikate (Inhalt Byte für Byte gleich) werden in Gruppen angezeigt. Es 
 besten Platz – Kameraordner vor Bilderordnern vor Downloads vor Messenger-Ordnern, bei Gleichstand die
 ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb; automatisch passiert hier nichts.
 
+Ebenfalls dort: Reste entfernter Apps – Ordner unter `Android/media`, deren App nicht mehr
+installiert ist.
+
 ## Apps
 
 Der Reiter *Apps* listet die installierten Apps mit Größe (App, Daten, Cache) und letzter Nutzung:
 lange nicht genutzte Apps, die größten Caches und alle Apps nach Größe. Ein Tipp öffnet die
 Systemseite der App mit „Cache leeren" und „Deinstallieren" – selbst kann die App fremde Apps weder
-leeren noch entfernen. Nötig ist dafür einmalig der Nutzungsdatenzugriff in den Systemeinstellungen.
+leeren noch entfernen. Sammeln sich mehr als 5 GB Cache an, erinnert die App höchstens einmal pro Woche daran. Nötig ist dafür einmalig der Nutzungsdatenzugriff in den Systemeinstellungen.
 
 Ist der Schalter dort grau („eingeschränkte Einstellung"): unter *Einstellungen → Apps → Kehraus* oben
 rechts auf die drei Punkte tippen und „Eingeschränkte Einstellungen zulassen" wählen. Android sperrt

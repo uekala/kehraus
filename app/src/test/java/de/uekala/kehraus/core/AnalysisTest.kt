@@ -139,4 +139,22 @@ class AnalysisTest {
         )
         assertEquals(order, order.shuffled(java.util.Random(1)).sortedBy { Duplicates.rank(it) })
     }
+
+    @Test
+    fun `Reste deinstallierter Apps werden nur bei glaubwürdiger App-Liste gemeldet`() {
+        file("Android/media/com.weg.app/Bilder/a.jpg", bytes(100))
+        file("Android/media/com.weg.app/b.bin", bytes(50))
+        file("Android/media/com.da.app/c.jpg", bytes(70))
+        file("Android/media/keinpaket/d.jpg", bytes(70))
+        File(root, "Android/media/com.leer.app").mkdirs()
+        val report = Analysis.scan(root)
+        val installed = (1..30).map { "com.beispiel.app$it" }.toSet() + "com.da.app"
+
+        val orphan = Orphans.find(report, installed).single()
+
+        assertEquals("com.weg.app", orphan.pkg)
+        assertEquals(Usage(150, 2), orphan.usage)
+        assertEquals(setOf("a.jpg", "b.bin"), Orphans.filesOf(report, orphan).map { it.name }.toSet())
+        assertTrue(Orphans.find(report, setOf("com.da.app")).isEmpty())
+    }
 }

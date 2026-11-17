@@ -34,6 +34,10 @@ object Apps {
         }
     }
 
+    /** Paketnamen aller installierten Apps. */
+    fun installed(ctx: Context): Set<String> =
+        runCatching { ctx.packageManager.getInstalledApplications(0).map { it.packageName }.toSet() }.getOrDefault(emptySet())
+
     fun load(ctx: Context): List<AppUsage> {
         val pm = ctx.packageManager
         val storage = ctx.getSystemService(StorageStatsManager::class.java)
