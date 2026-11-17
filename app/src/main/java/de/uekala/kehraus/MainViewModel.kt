@@ -9,9 +9,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.uekala.kehraus.bg.CleanWorker
 import de.uekala.kehraus.bg.Runner
+import de.uekala.kehraus.core.Analysis
+import de.uekala.kehraus.core.DupGroup
+import de.uekala.kehraus.core.Duplicates
 import de.uekala.kehraus.core.HistoryEntry
 import de.uekala.kehraus.core.Hit
 import de.uekala.kehraus.core.Protection
+import de.uekala.kehraus.core.Report
 import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
 import de.uekala.kehraus.core.RuleResult
@@ -23,6 +27,7 @@ import de.uekala.kehraus.data.StorageInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /** Was eine Regel im Moment treffen würde. [hits] enthält höchstens die 200 größten Dateien. */
 data class Preview(val count: Int, val bytes: Long, val hits: List<Hit>)
@@ -49,6 +54,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Gesetzt, solange die App fragt, ob angehaltene Regeln trotzdem laufen sollen. */
     var askHeld by mutableStateOf<List<RuleResult>>(emptyList()); private set
+
+    /** Ergebnis der letzten Speicher-Analyse; null, solange noch keine gelaufen ist. */
+    var report by mutableStateOf<Report?>(null); private set
+    var duplicates by mutableStateOf<List<DupGroup>?>(null); private set
+
+    /** Fortschrittstext, solange die Analyse läuft. */
+    var analyzing by mutableStateOf<String?>(null); private set
+
+    /** Pfade, die seit der Analyse in den Papierkorb gewandert sind – die Listen blenden sie aus. */
+    var gone by mutableStateOf<Set<String>>(emptySet()); private set
 
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null)
@@ -162,6 +177,51 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- Analyse ----------
+
+    fun analyze() {
+        if (analyzing != null || !hasAccess) return
+        analyzing = "Speicher wird durchsucht …"
+        val guard = protection
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching { Analysis.scan(Storage.root, Storage.trash().dir) }.getOrNull()
+            }
+            gone = emptySet()
+            report = r
+            duplicates = null
+            if (r == null) {
+                message = "Analyse fehlgeschlagen"
+            } else {
+                analyzing = "Duplikate werden gesucht …"
+                duplicates = withContext(Dispatchers.IO) {
+                    runCatching {
+                        Duplicates.find(r.files, r.root, guard) { done, total ->
+                            analyzing = "Duplikate werden gesucht … $done von $total"
+                        }
+                    }.getOrDefault(emptyList())
+                }
+            }
+            analyzing = null
+        }
+    }
+
+    /** Verschiebt einzelne Dateien von Hand in den Papierkorb; [label] steht später als Herkunft dabei. */
+    fun trashFiles(paths: List<String>, label: String) = trashAction {
+        val store = Storage.trash()
+        val now = System.currentTimeMillis()
+        var bytes = 0L
+        val moved = paths.filter { path ->
+            val entry = store.add(File(path), label, now)
+            if (entry != null) bytes += entry.size
+            entry != null
+        }
+        Storage.rescan(ctx, moved)
+        gone = gone + moved
+        if (moved.size == paths.size) "${files(moved.size)} (${size(bytes)}) in den Papierkorb verschoben"
+        else "${moved.size} von ${paths.size} verschoben"
+    }
+
     // ---------- Schutzliste ----------
 
     private fun saveProtection(p: Protection) {
@@ -211,5 +271,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         fun files(n: Int): String = if (n == 1) "1 Datei" else "$n Dateien"
+
+        /** Herkunft im Papierkorb für Dateien, die keine Regel verschoben hat. */
+        const val MANUAL = "MANUAL"
+        const val DUPLICATE = "DUPLICATE"
     }
 }

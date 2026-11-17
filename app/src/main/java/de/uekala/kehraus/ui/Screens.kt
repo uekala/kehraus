@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -67,9 +68,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.uekala.kehraus.MainViewModel
 import de.uekala.kehraus.MainViewModel.Companion.files
+import de.uekala.kehraus.core.DupGroup
+import de.uekala.kehraus.core.FileInfo
 import de.uekala.kehraus.core.Group
 import de.uekala.kehraus.core.HistoryEntry
 import de.uekala.kehraus.core.Kind
+import de.uekala.kehraus.core.Report
 import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
 import de.uekala.kehraus.core.Rules
@@ -116,7 +120,12 @@ fun App(vm: MainViewModel) {
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             NavigationBar(containerColor = Surface) {
-                val tabs = listOf("Übersicht" to Icons.Filled.Home, "Regeln" to Icons.Filled.Settings, "Papierkorb" to Icons.Filled.Delete)
+                val tabs = listOf(
+                    "Übersicht" to Icons.Filled.Home,
+                    "Regeln" to Icons.Filled.Settings,
+                    "Analyse" to Icons.Filled.Search,
+                    "Papierkorb" to Icons.Filled.Delete,
+                )
                 tabs.forEachIndexed { i, (label, icon) ->
                     NavigationBarItem(
                         selected = tab == i,
@@ -132,6 +141,7 @@ fun App(vm: MainViewModel) {
             when (tab) {
                 0 -> Overview(vm, onOpenRules = { tab = 1 })
                 1 -> RulesScreen(vm)
+                2 -> AnalysisScreen(vm)
                 else -> TrashScreen(vm)
             }
         }
@@ -189,6 +199,8 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
                     color = if (used > 0.9f) Warn else Accent,
                     trackColor = Track,
+                    gapSize = 0.dp,
+                    drawStopIndicator = {},
                 )
                 if (s.low) {
                     Text(
@@ -428,6 +440,174 @@ private fun HitsDialog(vm: MainViewModel, id: RuleId, onClose: () -> Unit) {
     )
 }
 
+// ---------- Analyse ----------
+
+@Composable
+private fun AnalysisScreen(vm: MainViewModel) {
+    var selected by remember { mutableStateOf<FileInfo?>(null) }
+    var confirmAll by remember { mutableStateOf(false) }
+    val report = vm.report
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Heading("Analyse")
+        Dim("Zeigt, wo der Platz hingeht. Hier passiert nichts von selbst – du entscheidest Datei für Datei oder Gruppe für Gruppe.")
+        Button(
+            onClick = { vm.analyze() },
+            enabled = vm.hasAccess && vm.analyzing == null,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(vm.analyzing ?: if (report == null) "Speicher analysieren" else "Neu analysieren") }
+        if (!vm.hasAccess) Dim("Erst auf der Übersicht den Dateizugriff erlauben.")
+
+        if (report != null) {
+            Panel("Nach Art") {
+                val total = report.total.bytes.coerceAtLeast(1)
+                report.byCategory.entries.sortedByDescending { it.value.bytes }.forEach { (cat, use) ->
+                    KeyValue(cat.title, "${vm.size(use.bytes)} · ${files(use.files)}")
+                    LinearProgressIndicator(
+                        progress = { (use.bytes.toFloat() / total).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color = Accent,
+                        trackColor = Track,
+                        gapSize = 0.dp,
+                        drawStopIndicator = {},
+                    )
+                }
+                Dim(
+                    "Zusammen ${vm.size(report.total.bytes)} in ${files(report.total.files)}. Apps und ihre Daten zählen nicht mit – " +
+                        "darauf hat Kehraus keinen Zugriff.",
+                    size = 12,
+                )
+            }
+
+            FolderPanel(vm, report) { selected = it }
+
+            Panel("Größte Dateien") {
+                report.largest.filter { it.path !in vm.gone }.take(30).forEach { f -> FileRow(vm, f) { selected = f } }
+            }
+
+            DuplicatesPanel(vm) { confirmAll = true }
+        }
+    }
+
+    selected?.let { f ->
+        AlertDialog(
+            onDismissRequest = { selected = null },
+            title = { Text(f.name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Thumb(File(f.path), f.name, 200)
+                    Dim(Storage.relative(f.path), size = 12)
+                    Dim("${vm.size(f.size)} · geändert am ${dateTime(f.modified)}", size = 12)
+                    TextButton(onClick = { vm.protectFile(f.path); selected = null }) { Text("Schützen") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.trashFiles(listOf(f.path), MainViewModel.MANUAL); selected = null }) {
+                    Text("In den Papierkorb")
+                }
+            },
+            dismissButton = { TextButton(onClick = { selected = null }) { Text("Schließen") } },
+        )
+    }
+
+    if (confirmAll) {
+        val copies = vm.duplicates.orEmpty().flatMap { it.copies }.filter { it.path !in vm.gone }
+        AlertDialog(
+            onDismissRequest = { confirmAll = false },
+            title = { Text("Alle Kopien verschieben?") },
+            text = {
+                Text(
+                    "${files(copies.size)} (${vm.size(copies.sumOf { it.size })}) wandern in den Papierkorb. " +
+                        "Von jeder Gruppe bleibt eine Datei an ihrem Platz."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.trashFiles(copies.map { it.path }, MainViewModel.DUPLICATE); confirmAll = false }) {
+                    Text("Verschieben")
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Abbrechen") } },
+        )
+    }
+}
+
+@Composable
+private fun FolderPanel(vm: MainViewModel, report: Report, onFile: (FileInfo) -> Unit) {
+    var dir by remember(report) { mutableStateOf(report.root) }
+    Panel("Ordner") {
+        Dim(Storage.relative(dir) + " · " + vm.size(report.folders[dir]?.bytes ?: 0), size = 13)
+        if (dir != report.root) {
+            Text(
+                "‹ zurück",
+                color = Accent,
+                modifier = Modifier.fillMaxWidth().clickable { dir = dir.substringBeforeLast('/', report.root) }.padding(vertical = 8.dp),
+            )
+        }
+        report.subfolders(dir).take(25).forEach { (path, use) ->
+            Row(
+                Modifier.fillMaxWidth().clickable { dir = path }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(path.substringAfterLast('/') + " ›", color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(vm.size(use.bytes), color = TextDim, fontSize = 14.sp)
+            }
+        }
+        val here = remember(report, dir, vm.gone) { report.filesIn(dir, 15).filter { it.path !in vm.gone } }
+        here.forEach { f -> FileRow(vm, f) { onFile(f) } }
+    }
+}
+
+@Composable
+private fun FileRow(vm: MainViewModel, f: FileInfo, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(f.name, color = TextMain, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Dim(Storage.relative(f.parent), size = 12)
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(vm.size(f.size), color = TextDim, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun DuplicatesPanel(vm: MainViewModel, onAll: () -> Unit) {
+    val all = vm.duplicates
+    val groups = all.orEmpty().map { g -> g.copy(copies = g.copies.filter { it.path !in vm.gone }) }
+        .filter { it.copies.isNotEmpty() && it.keep.path !in vm.gone }
+    Panel("Exakte Duplikate") {
+        when {
+            all == null -> Dim("Wird gesucht …")
+            groups.isEmpty() -> Dim("Keine Dateien mit gleichem Inhalt gefunden.")
+            else -> {
+                Text("${groups.size} Gruppen · ${vm.size(groups.sumOf { it.wasted })} einsparbar", color = Accent)
+                Dim("Inhalt Byte für Byte gleich. Es bleibt jeweils die Datei am besten Platz, bevorzugt im Kameraordner.", size = 12)
+                OutlinedButton(onClick = onAll, enabled = !vm.busy) { Text("Alle Kopien in den Papierkorb") }
+                groups.take(40).forEach { g -> DupRow(vm, g) }
+                if (groups.size > 40) Dim("… und ${groups.size - 40} weitere Gruppen", size = 12)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DupRow(vm: MainViewModel, g: DupGroup) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Thumb(File(g.keep.path), g.keep.name, 48)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(g.keep.name, color = TextMain, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Dim("bleibt: ${Storage.relative(g.keep.parent)}", size = 12)
+            Dim("${files(g.copies.size)} doppelt · ${vm.size(g.wasted)} · in ${g.copies.map { it.parent.substringAfterLast('/') }.distinct().joinToString(", ")}", size = 12)
+        }
+        TextButton(onClick = { vm.trashFiles(g.copies.map { it.path }, MainViewModel.DUPLICATE) }, enabled = !vm.busy) { Text("Weg") }
+    }
+}
+
 // ---------- Papierkorb ----------
 
 @Composable
@@ -523,7 +703,11 @@ private fun TrashScreen(vm: MainViewModel) {
 
 private fun folderOf(e: TrashEntry): String = File(e.original).parentFile?.name ?: "–"
 
-private fun ruleTitle(name: String): String = RuleId.entries.firstOrNull { it.name == name }?.fullTitle ?: name
+private fun ruleTitle(name: String): String = when (name) {
+    MainViewModel.MANUAL -> "von Hand"
+    MainViewModel.DUPLICATE -> "Duplikat"
+    else -> RuleId.entries.firstOrNull { it.name == name }?.fullTitle ?: name
+}
 
 private fun remaining(e: TrashEntry, retentionDays: Int, now: Long): String {
     val left = e.expiresAt(retentionDays) - now
