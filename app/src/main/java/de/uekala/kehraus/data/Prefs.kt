@@ -45,6 +45,9 @@ object Prefs {
     fun emptyDirs(ctx: Context): Boolean = sp(ctx).getBoolean("emptyDirs", false)
     fun setEmptyDirs(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("emptyDirs", v).apply()
 
+    fun sortDownloads(ctx: Context): Boolean = sp(ctx).getBoolean("sortDownloads", false)
+    fun setSortDownloads(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("sortDownloads", v).apply()
+
     // Schutzliste: volle Pfade von Ordnern und Dateien, die keine Regel anfasst.
     fun protection(ctx: Context): Protection {
         val p = sp(ctx)

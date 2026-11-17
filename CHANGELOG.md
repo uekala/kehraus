@@ -12,3 +12,5 @@
 - Analyse: Speicher nach Dateiart und Ordner, größte Dateien, exakte Duplikate
 - Papierkorb nach Zeitpunkt und Name sortiert
 - Apps: Größe, Cache und letzte Nutzung; lange nicht genutzte Apps als Vorschlag
+- Downloads nach Art in Unterordner sortieren, mit Zurücknehmen
+- Installationsdateien werden im ganzen Gerätespeicher gefunden

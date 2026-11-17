@@ -18,11 +18,15 @@ Jede Regel ist einzeln ein- und ausschaltbar. Nach der Installation sind alle au
 | WhatsApp · Sprachnachrichten und Audio | Sprachnachrichten, Audiodateien | älter als 90 Tage |
 | WhatsApp · Dokumente | PDFs und andere Dateien | älter als 180 Tage |
 | Telegram-Dateien | alles, was Telegram im Gerätespeicher ablegt | älter als 60 Tage |
-| Installationsdateien | APK-Dateien im Download-Ordner | älter als 7 Tage |
+| Installationsdateien | APK-Dateien im ganzen Gerätespeicher, außer in App-Ordnern | älter als 7 Tage |
 | Downloads | alles im Download-Ordner | älter als 90 Tage |
 
 Dazu als eigener Schalter: leere Ordner entfernen (in `Download`, `Pictures`, `DCIM`, `Movies`,
 `Documents`, `Music`; werden direkt gelöscht, da nichts aufzuheben ist).
+
+Ebenfalls als eigener Schalter: Downloads nach Art sortieren. Lose Dateien im Download-Ordner, die
+älter als 7 Tage sind, wandern in Unterordner (Dokumente, Bilder, Videos, Audio, Archive,
+Installationsdateien). Gelöscht wird dabei nichts, und die Sortierung lässt sich zurücknehmen.
 
 Jede Regel zeigt vorab, wie viele Dateien sie im Moment treffen würde, und listet sie auf.
 Versteckte Dateien und Ordner bleiben immer unberührt.
@@ -89,4 +93,4 @@ leeren noch entfernen. Nötig ist dafür einmalig der Nutzungsdatenzugriff in de
 ## Geplant
 
 - Ähnliche Fotos und Serienbilder, unscharfe Bilder
-- Fotos und Downloads nach Regeln in Ordner sortieren
+- Belege und Dokumentfotos erkennen und einsortieren
