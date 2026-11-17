@@ -90,6 +90,10 @@ lange nicht genutzte Apps, die größten Caches und alle Apps nach Größe. Ein 
 Systemseite der App mit „Cache leeren" und „Deinstallieren" – selbst kann die App fremde Apps weder
 leeren noch entfernen. Nötig ist dafür einmalig der Nutzungsdatenzugriff in den Systemeinstellungen.
 
+Ist der Schalter dort grau („eingeschränkte Einstellung"): unter *Einstellungen → Apps → Kehraus* oben
+rechts auf die drei Punkte tippen und „Eingeschränkte Einstellungen zulassen" wählen. Android sperrt
+solche Schalter bei Apps, die nicht aus einem Store kommen, zunächst.
+
 ## Geplant
 
 - Ähnliche Fotos und Serienbilder, unscharfe Bilder

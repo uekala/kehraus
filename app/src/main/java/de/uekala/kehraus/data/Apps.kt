@@ -47,8 +47,9 @@ object Apps {
         return pm.getInstalledApplications(0).mapNotNull { info ->
             val stats = runCatching { storage.queryStatsForPackage(info.storageUuid, info.packageName, user) }.getOrNull()
                 ?: return@mapNotNull null
-            val system = info.flags and ApplicationInfo.FLAG_SYSTEM != 0 &&
-                info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP == 0
+            // Auch aktualisierte vorinstallierte Apps (Tastatur, Hersteller-Apps) zählen als System:
+            // Sie lassen sich nicht entfernen, nur deaktivieren.
+            val system = info.flags and ApplicationInfo.FLAG_SYSTEM != 0
             AppUsage(
                 pkg = info.packageName,
                 label = runCatching { pm.getApplicationLabel(info).toString() }.getOrDefault(info.packageName),

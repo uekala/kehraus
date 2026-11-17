@@ -29,9 +29,8 @@ object AppAdvice {
         apps.filter { it.cacheBytes >= minBytes }.sortedByDescending { it.cacheBytes }
 
     /**
-     * Selbst installierte Apps, die Platz belegen und seit [minDays] Tagen nicht genutzt wurden.
-     * Apps ohne aufgezeichnete Nutzung zählen dazu – das können aber auch Dienste sein, die nie
-     * im Vordergrund laufen (Tastaturen, Widgets). Deshalb ist das nur ein Vorschlag.
+     * Selbst installierte Apps, die Platz belegen und nachweislich seit [minDays] Tagen nicht
+     * geöffnet wurden. Vorinstallierte Apps bleiben außen vor: Sie lassen sich ohnehin nicht entfernen.
      */
     fun unused(
         apps: List<AppUsage>,
@@ -41,6 +40,17 @@ object AppAdvice {
         minBytes: Long = 50 * Rules.MB,
     ): List<AppUsage> = apps.filter { app ->
         val idle = app.idleDays(now)
-        !app.system && app.pkg != self && app.total >= minBytes && (idle == null || idle >= minDays)
+        !app.system && app.pkg != self && app.total >= minBytes && idle != null && idle >= minDays
     }.sortedByDescending { it.total }
+
+    /**
+     * Selbst installierte Apps, für die das System gar keine Nutzung kennt. Das kann „nie geöffnet"
+     * heißen – oder ein Dienst sein, der nie im Vordergrund läuft. Deshalb getrennt von [unused].
+     */
+    fun neverSeen(
+        apps: List<AppUsage>,
+        self: String,
+        minBytes: Long = 50 * Rules.MB,
+    ): List<AppUsage> = apps.filter { !it.system && it.pkg != self && it.total >= minBytes && it.lastUsed <= 0 }
+        .sortedByDescending { it.total }
 }
