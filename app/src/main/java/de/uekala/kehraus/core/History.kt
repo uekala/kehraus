@@ -5,7 +5,7 @@ import java.io.File
 /** Eine Zeile im Verlauf: was eine Regel (oder das Leeren nach Frist) in einem Lauf getan hat. */
 data class HistoryEntry(
     val at: Long,
-    /** [RuleId.name], [PURGED] oder [EMPTY_DIRS]. */
+    /** [RuleId.name], [PURGED], [SORTED] oder [EMPTY_DIRS]. */
     val what: String,
     val count: Int,
     val bytes: Long,
@@ -15,6 +15,7 @@ data class HistoryEntry(
     companion object {
         const val PURGED = "PURGED"
         const val EMPTY_DIRS = "EMPTY_DIRS"
+        const val SORTED = "SORTED"
     }
 }
 
@@ -32,6 +33,7 @@ class History(private val file: File, private val keep: Int = 300) {
             if (x.held) fresh += HistoryEntry(r.at, x.id.name, x.heldCount, x.heldBytes, held = true)
             else if (x.moved > 0 || x.failed > 0) fresh += HistoryEntry(r.at, x.id.name, x.moved, x.bytes, x.failed)
         }
+        if (r.sorted > 0) fresh += HistoryEntry(r.at, HistoryEntry.SORTED, r.sorted, 0)
         if (r.emptyDirs > 0) fresh += HistoryEntry(r.at, HistoryEntry.EMPTY_DIRS, r.emptyDirs, 0)
         if (fresh.isEmpty()) return
         synchronized(LOCK) {

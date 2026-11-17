@@ -20,6 +20,8 @@ data class RunResult(
     val purged: Freed,
     /** Entfernte leere Ordner. */
     val emptyDirs: Int,
+    /** Im Download-Ordner einsortierte Dateien. */
+    val sorted: Int = 0,
     /** Pfade, an denen jetzt keine Datei mehr liegt (für die Mediathek des Geräts). */
     val changedPaths: List<String>,
 ) {
@@ -41,6 +43,9 @@ data class RunOptions(
     /** Regeln, für die die Notbremse in diesem Lauf nicht gilt (vom Nutzer bestätigt). */
     val confirmed: Set<RuleId> = emptySet(),
     val removeEmptyDirs: Boolean = false,
+    /** Wenn gesetzt, werden Downloads nach Art einsortiert; die Datei merkt sich die Verschiebungen zum Zurücknehmen. */
+    val sortJournal: File? = null,
+    val sortAgeDays: Int = 7,
 )
 
 /** Ein Aufräum-Lauf: abgelaufenen Papierkorb leeren, jede eingeschaltete Regel anwenden, Reste entfernen. */
@@ -71,8 +76,15 @@ class Engine(private val root: File, val trash: Trash) {
             }
             RuleResult(rule.id, moved, bytes, failed)
         }
+        var sorted = 0
+        if (options.sortJournal != null) {
+            val moves = DownloadSorter.plan(root, now, options.sortAgeDays, options.protection)
+            val done = DownloadSorter.apply(moves, options.sortJournal)
+            sorted = done.size
+            done.forEach { changed.add(it.from); changed.add(it.to) }
+        }
         val emptied = if (options.removeEmptyDirs) EmptyDirs.remove(root, trash.dir, options.protection) else 0
-        return RunResult(now, results, purged, emptied, changed)
+        return RunResult(now, results, purged, emptied, sorted, changed)
     }
 }
 

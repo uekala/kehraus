@@ -22,6 +22,7 @@ object Notifier {
         val parts = ArrayList<String>()
         if (r.moved > 0) parts += "${files(r.moved)} (${size(ctx, r.movedBytes)}) in den Papierkorb verschoben"
         if (r.purged.count > 0) parts += "${size(ctx, r.purged.bytes)} endgültig freigegeben"
+        if (r.sorted > 0) parts += "${files(r.sorted)} im Download-Ordner einsortiert"
         if (r.failed > 0) parts += "${files(r.failed)} ließen sich nicht verschieben"
         if (r.held.isNotEmpty()) {
             val n = r.held.sumOf { it.heldCount }

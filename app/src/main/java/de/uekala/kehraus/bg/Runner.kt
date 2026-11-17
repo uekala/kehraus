@@ -17,6 +17,7 @@ object Runner {
             protection = Prefs.protection(ctx),
             confirmed = confirmed,
             removeEmptyDirs = Prefs.emptyDirs(ctx),
+            sortJournal = if (Prefs.sortDownloads(ctx)) Storage.sortJournal(ctx) else null,
         )
         val result = Storage.engine().run(Prefs.rules(ctx), options, System.currentTimeMillis())
         Prefs.recordRun(ctx, result)

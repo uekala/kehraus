@@ -242,10 +242,10 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
             }
             Button(
                 onClick = { vm.runNow() },
-                enabled = vm.hasAccess && anyEnabled && !vm.busy,
+                enabled = vm.hasAccess && (anyEnabled || vm.sortDownloads || vm.emptyDirs) && !vm.busy,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (vm.busy) "Räumt auf …" else "Jetzt aufräumen") }
-            if (!anyEnabled) {
+            if (!anyEnabled && !vm.sortDownloads && !vm.emptyDirs) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Dim("Noch ist keine Regel eingeschaltet.", Modifier.weight(1f))
                     TextButton(onClick = onOpenRules) { Text("Regeln") }
@@ -280,12 +280,14 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit) {
 private fun historyTitle(e: HistoryEntry): String = when (e.what) {
     HistoryEntry.PURGED -> "Papierkorb: Frist abgelaufen"
     HistoryEntry.EMPTY_DIRS -> "Leere Ordner"
+    HistoryEntry.SORTED -> "Downloads sortiert"
     else -> ruleTitle(e.what)
 }
 
 private fun historyDetail(vm: MainViewModel, e: HistoryEntry): String = when {
     e.what == HistoryEntry.PURGED -> "${files(e.count)} endgültig gelöscht · ${vm.size(e.bytes)}"
     e.what == HistoryEntry.EMPTY_DIRS -> "${e.count} entfernt"
+    e.what == HistoryEntry.SORTED -> "${files(e.count)} in Unterordner gelegt"
     e.held -> "angehalten bei ${files(e.count)} · ${vm.size(e.bytes)}"
     else -> buildString {
         append("${files(e.count)} verschoben · ${vm.size(e.bytes)}")
@@ -311,6 +313,23 @@ private fun RulesScreen(vm: MainViewModel) {
         }
 
         SectionTitle("Weitere Aufgaben")
+        Panel {
+            SwitchRow(
+                "Downloads nach Art sortieren",
+                "Lose Dateien im Download-Ordner, älter als 7 Tage, wandern in Unterordner: Dokumente, Bilder, Videos, Audio, Archive, Installationsdateien. Gelöscht wird dabei nichts.",
+                vm.sortDownloads,
+            ) { vm.updateSortDownloads(it) }
+            Dim(
+                if (vm.sortPreview == 0) "Im Moment gibt es nichts einzusortieren."
+                else "Würde jetzt ${files(vm.sortPreview)} einsortieren.",
+                size = 13,
+            )
+            if (vm.sortPending > 0) {
+                OutlinedButton(onClick = { vm.undoSort() }, enabled = !vm.busy) {
+                    Text("Sortierung zurücknehmen (${vm.sortPending})")
+                }
+            }
+        }
         Panel {
             SwitchRow(
                 "Leere Ordner entfernen",

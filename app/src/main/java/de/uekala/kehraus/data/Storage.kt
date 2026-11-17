@@ -26,6 +26,9 @@ object Storage {
 
     fun history(ctx: Context): History = History(File(ctx.filesDir, "verlauf.tsv"))
 
+    /** Merkt sich, was beim Sortieren der Downloads wohin verschoben wurde. */
+    fun sortJournal(ctx: Context): File = File(ctx.filesDir, "sortierung.tsv")
+
     /** Pfad ohne den Gerätespeicher davor, zur Anzeige. */
     fun relative(path: String): String = path.removePrefix(root.absolutePath).trimStart('/').ifEmpty { "Gerätespeicher" }
 

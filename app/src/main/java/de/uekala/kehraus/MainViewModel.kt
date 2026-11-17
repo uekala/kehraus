@@ -11,6 +11,7 @@ import de.uekala.kehraus.bg.CleanWorker
 import de.uekala.kehraus.bg.Runner
 import de.uekala.kehraus.core.Analysis
 import de.uekala.kehraus.core.AppUsage
+import de.uekala.kehraus.core.DownloadSorter
 import de.uekala.kehraus.core.DupGroup
 import de.uekala.kehraus.core.Duplicates
 import de.uekala.kehraus.core.HistoryEntry
@@ -48,6 +49,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var auto by mutableStateOf(Prefs.auto(app)); private set
     var notify by mutableStateOf(Prefs.notify(app)); private set
     var emptyDirs by mutableStateOf(Prefs.emptyDirs(app)); private set
+    var sortDownloads by mutableStateOf(Prefs.sortDownloads(app)); private set
+
+    /** Wie viele Downloads im Moment einsortiert würden und wie viele sich zurücklegen lassen. */
+    var sortPreview by mutableStateOf(0); private set
+    var sortPending by mutableStateOf(0); private set
     var lastRun by mutableStateOf<LastRun?>(Prefs.lastRun(app)); private set
     var totalFreed by mutableStateOf(Prefs.totalFreed(app)); private set
 
@@ -98,6 +104,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val now = System.currentTimeMillis()
             val current = rules
             val guard = protection
+            val (plan, pending) = withContext(Dispatchers.IO) {
+                runCatching {
+                    DownloadSorter.plan(Storage.root, now, protection = guard).size to DownloadSorter.pending(Storage.sortJournal(ctx))
+                }.getOrDefault(0 to 0)
+            }
+            sortPreview = plan
+            sortPending = pending
             val (t, s, p) = withContext(Dispatchers.IO) {
                 Triple(
                     runCatching { Storage.trash().entries() }.getOrDefault(emptyList()),
@@ -140,9 +153,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 result.isFailure -> "Aufräumen fehlgeschlagen: ${result.exceptionOrNull()?.message ?: "unbekannter Fehler"}"
                 r == null -> "Erst den Dateizugriff erlauben"
                 r.held.isNotEmpty() && r.moved == 0 -> null
-                r.moved == 0 && r.failed == 0 && r.emptyDirs == 0 -> "Nichts zu tun"
+                r.moved == 0 && r.failed == 0 && r.emptyDirs == 0 && r.sorted == 0 -> "Nichts zu tun"
                 else -> buildString {
                     append("${files(r.moved)} (${size(r.movedBytes)}) in den Papierkorb verschoben")
+                    if (r.sorted > 0) append(" · ${files(r.sorted)} einsortiert")
                     if (r.emptyDirs > 0) append(" · ${r.emptyDirs} leere Ordner entfernt")
                     if (r.failed > 0) append(" · ${files(r.failed)} ließen sich nicht verschieben")
                 }
@@ -285,6 +299,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun updateNotify(v: Boolean) {
         notify = v
         Prefs.setNotify(ctx, v)
+    }
+
+    fun updateSortDownloads(v: Boolean) {
+        sortDownloads = v
+        Prefs.setSortDownloads(ctx, v)
+    }
+
+    /** Legt alle einsortierten Downloads zurück an ihren alten Platz. */
+    fun undoSort() = trashAction {
+        val undone = DownloadSorter.undo(Storage.sortJournal(ctx))
+        Storage.rescan(ctx, undone.flatMap { listOf(it.from, it.to) })
+        "${files(undone.size)} zurück in den Download-Ordner gelegt"
     }
 
     fun updateEmptyDirs(v: Boolean) {

@@ -27,6 +27,8 @@ enum class RuleId(
     val extensions: Set<String> = emptySet(),
     /** Wenn gesetzt, zählen nur Dateien, in deren Pfad ein Ordner mit diesem Namen vorkommt. */
     val insideFolder: String? = null,
+    /** Ordner relativ zum Gerätespeicher, die diese Regel nie betritt. */
+    val skipFolders: List<String> = emptyList(),
 ) {
     SCREENSHOTS(
         Group.MEDIA, "Screenshots",
@@ -84,10 +86,11 @@ enum class RuleId(
     ),
     APKS(
         Group.FILES, "Installationsdateien",
-        "APK-Dateien im Download-Ordner. Nach der Installation werden sie nicht mehr gebraucht.",
-        listOf("Download"),
+        "APK-Dateien im ganzen Gerätespeicher, außer in den Ordnern anderer Apps. Nach der Installation werden sie nicht mehr gebraucht.",
+        listOf(""),
         defaultAgeDays = 7,
         extensions = setOf("apk", "xapk", "apks", "apkm"),
+        skipFolders = listOf("Android"),
     ),
     DOWNLOADS(
         Group.FILES, "Downloads",
@@ -162,15 +165,17 @@ object Rules {
         val cutoff = now - rule.ageDays.coerceAtLeast(1) * DAY_MS
         val minSize = rule.minSizeMb.coerceAtLeast(0) * MB
         val excluded = exclude?.absoluteFile
+        val skipped = id.skipFolders.map { File(root, it).absolutePath }.toSet()
         val seen = HashSet<String>()
         val hits = ArrayList<Hit>()
         for (folder in id.folders) {
-            val dir = File(root, folder)
+            val dir = if (folder.isEmpty()) root else File(root, folder)
             if (!dir.isDirectory || protection.coversFolder(dir)) continue
             dir.walkTopDown()
                 .onEnter { d ->
                     (d == dir || !d.name.startsWith(".")) &&
                         d.absoluteFile != excluded &&
+                        d.absolutePath !in skipped &&
                         d.absolutePath !in protection.folders
                 }
                 .filter { it.isFile && !it.name.startsWith(".") }
