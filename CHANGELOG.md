@@ -22,3 +22,4 @@
 - Nichts wird mehr von selbst gelöscht: Regeln empfehlen nur noch, verschoben wird erst nach Bestätigung je Regel
 - Der Papierkorb löscht nie von selbst, die Frist entfällt; Erinnerung ab 1 GB im Papierkorb
 - Übersicht mit Empfehlungen; „Jetzt sortieren und prüfen“ statt „Jetzt aufräumen“
+- Eigenes Logo (Besen mit Funkeln), mit einfarbiger Fassung für Themen-Symbole

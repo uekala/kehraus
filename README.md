@@ -1,5 +1,7 @@
 # Kehraus
 
+<img src="docs/logo.png" width="96" alt="Kehraus-Logo">
+
 Android-App, die das eigene Handy aufräumt und sortiert, ohne von selbst etwas zu löschen.
 Regeln finden, was weg könnte, und empfehlen es; in den Papierkorb kommt nur, was man bestätigt,
 und der Papierkorb löscht nie von selbst.
