@@ -19,3 +19,6 @@
 - Erinnerung bei viel App-Cache, Cache-Summe auf der Übersicht
 - Exakte Duplikate als eigene Regel für den täglichen Lauf
 - Apps: eigene Liste für Apps mit vielen Daten außerhalb des Caches
+- Nichts wird mehr von selbst gelöscht: Regeln empfehlen nur noch, verschoben wird erst nach Bestätigung je Regel
+- Der Papierkorb löscht nie von selbst, die Frist entfällt; Erinnerung ab 1 GB im Papierkorb
+- Übersicht mit Empfehlungen; „Jetzt sortieren und prüfen“ statt „Jetzt aufräumen“

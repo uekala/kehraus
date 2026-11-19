@@ -17,20 +17,31 @@ import de.uekala.kehraus.data.StorageInfo
 object Notifier {
     private const val CHANNEL = "ergebnis"
 
-    /** Meldet einen Hintergrundlauf – aber nur, wenn wirklich etwas passiert ist oder eine Regel wartet. */
+    /** Meldet, was der tägliche Lauf einsortiert hat – nur wenn wirklich etwas passiert ist. */
     fun report(ctx: Context, r: RunResult) {
         val parts = ArrayList<String>()
-        if (r.moved > 0) parts += "${files(r.moved)} (${size(ctx, r.movedBytes)}) in den Papierkorb verschoben"
-        if (r.purged.count > 0) parts += "${size(ctx, r.purged.bytes)} endgültig freigegeben"
         if (r.sorted > 0) parts += "${files(r.sorted)} im Download-Ordner einsortiert"
-        if (r.failed > 0) parts += "${files(r.failed)} ließen sich nicht verschieben"
-        if (r.held.isNotEmpty()) {
-            val n = r.held.sumOf { it.heldCount }
-            parts += "${files(n)} warten auf deine Bestätigung, weil es ungewöhnlich viele sind"
-        }
+        if (r.emptyDirs > 0) parts += "${r.emptyDirs} leere Ordner entfernt"
         if (parts.isEmpty()) return
-        val title = if (r.moved == 0 && r.purged.count == 0 && r.held.isNotEmpty()) "Kehraus wartet auf dich" else "Kehraus hat aufgeräumt"
-        show(ctx, 1, title, parts.joinToString(" · "))
+        show(ctx, 1, "Kehraus hat sortiert", parts.joinToString(" · "))
+    }
+
+    /** Empfehlung, etwas wegzuräumen. Verschoben wird erst nach Bestätigung in der App. */
+    fun recommend(ctx: Context, r: RunResult) {
+        val n = r.recommendations.sumOf { it.count }
+        show(
+            ctx, 4, "Kehraus empfiehlt aufzuräumen",
+            "Deine Regeln finden ${files(n)} (${size(ctx, r.recommendedBytes)}), die weg könnten. " +
+                "Unter „Regeln“ siehst du, was es ist – verschoben wird nur, was du bestätigst.",
+        )
+    }
+
+    /** Erinnerung, dass im Papierkorb viel liegt. Er löscht nichts von selbst. */
+    fun trashHint(ctx: Context, trashBytes: Long) {
+        show(
+            ctx, 5, "Papierkorb leeren?",
+            "Im Papierkorb liegen ${size(ctx, trashBytes)}. Er löscht nichts von selbst – erst Leeren gibt den Platz frei.",
+        )
     }
 
     /** Hinweis, wenn der Speicher knapp ist und der Papierkorb Platz hergeben könnte. */

@@ -22,7 +22,6 @@ import de.uekala.kehraus.core.Protection
 import de.uekala.kehraus.core.Report
 import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
-import de.uekala.kehraus.core.RuleResult
 import de.uekala.kehraus.core.TrashEntry
 import de.uekala.kehraus.data.Apps
 import de.uekala.kehraus.data.LastRun
@@ -47,7 +46,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var history by mutableStateOf<List<HistoryEntry>>(emptyList()); private set
     var storage by mutableStateOf<StorageInfo?>(null); private set
     var protection by mutableStateOf(Prefs.protection(app)); private set
-    var retentionDays by mutableStateOf(Prefs.retentionDays(app)); private set
     var auto by mutableStateOf(Prefs.auto(app)); private set
     var notify by mutableStateOf(Prefs.notify(app)); private set
     var emptyDirs by mutableStateOf(Prefs.emptyDirs(app)); private set
@@ -58,12 +56,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var sortPending by mutableStateOf(0); private set
     var lastRun by mutableStateOf<LastRun?>(Prefs.lastRun(app)); private set
     var totalFreed by mutableStateOf(Prefs.totalFreed(app)); private set
-
-    /** Regeln, die beim letzten Lauf wegen der Menge angehalten wurden. */
-    var held by mutableStateOf(heldRules()); private set
-
-    /** Gesetzt, solange die App fragt, ob angehaltene Regeln trotzdem laufen sollen. */
-    var askHeld by mutableStateOf<List<RuleResult>>(emptyList()); private set
 
     /** Ergebnis der letzten Speicher-Analyse; null, solange noch keine gelaufen ist. */
     var report by mutableStateOf<Report?>(null); private set
@@ -89,16 +81,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     val trashBytes: Long get() = trash.sumOf { it.size }
 
-    private fun heldRules(): List<RuleId> {
-        val names = Prefs.held(ctx)
-        return RuleId.entries.filter { it.name in names }
-    }
-
     fun refresh() {
         hasAccess = Storage.hasAccess()
         lastRun = Prefs.lastRun(ctx)
         totalFreed = Prefs.totalFreed(ctx)
-        held = heldRules()
         history = runCatching { Storage.history(ctx).entries().take(30) }.getOrDefault(emptyList())
         // Nach der Rückkehr aus den Systemeinstellungen (Zugriff erteilt, Cache geleert, App entfernt) neu auslesen.
         usageAccess = Apps.hasUsageAccess(ctx)
@@ -146,34 +132,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** [confirmed]: Regeln, die trotz großer Menge laufen sollen. */
-    fun runNow(confirmed: Set<RuleId> = emptySet()) {
+    /** Sortiert (wenn eingeschaltet) und zählt die Empfehlungen neu. Verschiebt nichts in den Papierkorb. */
+    fun runNow() {
         if (busy) return
         busy = true
-        askHeld = emptyList()
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { Runner.run(ctx, confirmed) } }
+            val result = withContext(Dispatchers.IO) { runCatching { Runner.run(ctx) } }
             busy = false
             val r = result.getOrNull()
             message = when {
-                result.isFailure -> "Aufräumen fehlgeschlagen: ${result.exceptionOrNull()?.message ?: "unbekannter Fehler"}"
+                result.isFailure -> "Fehlgeschlagen: ${result.exceptionOrNull()?.message ?: "unbekannter Fehler"}"
                 r == null -> "Erst den Dateizugriff erlauben"
-                r.held.isNotEmpty() && r.moved == 0 -> null
-                r.moved == 0 && r.failed == 0 && r.emptyDirs == 0 && r.sorted == 0 -> "Nichts zu tun"
+                r.sorted == 0 && r.emptyDirs == 0 -> "Nichts zu sortieren"
                 else -> buildString {
-                    append("${files(r.moved)} (${size(r.movedBytes)}) in den Papierkorb verschoben")
-                    if (r.sorted > 0) append(" · ${files(r.sorted)} einsortiert")
-                    if (r.emptyDirs > 0) append(" · ${r.emptyDirs} leere Ordner entfernt")
-                    if (r.failed > 0) append(" · ${files(r.failed)} ließen sich nicht verschieben")
+                    if (r.sorted > 0) append("${files(r.sorted)} einsortiert")
+                    if (r.emptyDirs > 0) {
+                        if (isNotEmpty()) append(" · ")
+                        append("${r.emptyDirs} leere Ordner entfernt")
+                    }
                 }
             }
-            if (r != null) askHeld = r.held
             refresh()
         }
     }
 
-    fun dismissHeld() {
-        askHeld = emptyList()
+    /** Verschiebt, was eine Regel gerade findet, in den Papierkorb. Nur nach Bestätigung in der Oberfläche aufrufen. */
+    fun trashRule(id: RuleId) = trashAction {
+        val r = Runner.trash(ctx, setOf(id)) ?: return@trashAction "Erst den Dateizugriff erlauben"
+        buildString {
+            append("${files(r.moved)} (${size(r.movedBytes)}) in den Papierkorb verschoben")
+            if (r.failed > 0) append(" · ${files(r.failed)} ließen sich nicht verschieben")
+        }
     }
 
     fun restore(ids: List<String>, protect: Boolean = false) = trashAction {
@@ -299,11 +288,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- Einstellungen ----------
-
-    fun updateRetention(days: Int) {
-        retentionDays = days
-        Prefs.setRetentionDays(ctx, days)
-    }
 
     fun updateAuto(v: Boolean) {
         auto = v

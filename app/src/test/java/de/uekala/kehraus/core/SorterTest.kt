@@ -123,7 +123,7 @@ class SorterTest {
         val hidden = file(".cache/d.apk", 30)
         val other = file("Backups/Apps/notiz.txt", 30)
 
-        val result = engine.run(listOf(RuleConfig(RuleId.APKS, enabled = true)), RunOptions(), now)
+        val result = engine.trash(listOf(RuleConfig(RuleId.APKS, enabled = true)), RunOptions(), now)
 
         assertEquals(3, result.moved)
         assertFalse(a.exists() || b.exists() || c.exists())

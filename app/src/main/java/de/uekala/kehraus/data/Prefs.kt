@@ -7,7 +7,8 @@ import de.uekala.kehraus.core.RuleConfig
 import de.uekala.kehraus.core.RuleId
 import de.uekala.kehraus.core.RunResult
 
-data class LastRun(val at: Long, val moved: Int, val bytes: Long, val failed: Int)
+/** Der letzte Lauf: was einsortiert wurde und was die Regeln empfohlen haben. */
+data class LastRun(val at: Long, val sorted: Int, val emptyDirs: Int, val recommendedFiles: Int, val recommendedBytes: Long)
 
 /** Einstellungen. Der Papierkorb selbst liegt nicht hier, sondern im Gerätespeicher. */
 object Prefs {
@@ -33,9 +34,6 @@ object Prefs {
             .apply()
     }
 
-    fun retentionDays(ctx: Context): Int = sp(ctx).getInt("retention", 30)
-    fun setRetentionDays(ctx: Context, days: Int) = sp(ctx).edit().putInt("retention", days).apply()
-
     fun auto(ctx: Context): Boolean = sp(ctx).getBoolean("auto", true)
     fun setAuto(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("auto", v).apply()
 
@@ -47,6 +45,12 @@ object Prefs {
 
     fun sortDownloads(ctx: Context): Boolean = sp(ctx).getBoolean("sortDownloads", false)
     fun setSortDownloads(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("sortDownloads", v).apply()
+
+    /** Wann zuletzt an Empfehlungen bzw. einen vollen Papierkorb erinnert wurde. */
+    fun recommendHintAt(ctx: Context): Long = sp(ctx).getLong("recommendHintAt", 0)
+    fun setRecommendHintAt(ctx: Context, at: Long) = sp(ctx).edit().putLong("recommendHintAt", at).apply()
+    fun trashHintAt(ctx: Context): Long = sp(ctx).getLong("trashHintAt", 0)
+    fun setTrashHintAt(ctx: Context, at: Long) = sp(ctx).edit().putLong("trashHintAt", at).apply()
 
     /** Wann zuletzt an einen vollen App-Cache erinnert wurde. */
     fun cacheHintAt(ctx: Context): Long = sp(ctx).getLong("cacheHintAt", 0)
@@ -68,9 +72,6 @@ object Prefs {
             .apply()
     }
 
-    /** Regeln, die der letzte Lauf wegen der Notbremse nicht ausgeführt hat ([RuleId.name]). */
-    fun held(ctx: Context): Set<String> = sp(ctx).getStringSet("held", emptySet()).orEmpty().toSet()
-
     /** Summe aller endgültig gelöschten Bytes. */
     fun totalFreed(ctx: Context): Long = sp(ctx).getLong("freed", 0)
     fun addFreed(ctx: Context, bytes: Long) {
@@ -81,17 +82,23 @@ object Prefs {
         val p = sp(ctx)
         val at = p.getLong("last.at", 0)
         if (at == 0L) return null
-        return LastRun(at, p.getInt("last.moved", 0), p.getLong("last.bytes", 0), p.getInt("last.failed", 0))
+        return LastRun(
+            at,
+            p.getInt("last.sorted", 0),
+            p.getInt("last.emptyDirs", 0),
+            p.getInt("last.recFiles", 0),
+            p.getLong("last.recBytes", 0),
+        )
     }
 
     fun recordRun(ctx: Context, r: RunResult) {
         sp(ctx).edit()
             .putLong("last.at", r.at)
-            .putInt("last.moved", r.moved)
-            .putLong("last.bytes", r.movedBytes)
-            .putInt("last.failed", r.failed)
+            .putInt("last.sorted", r.sorted)
+            .putInt("last.emptyDirs", r.emptyDirs)
+            .putInt("last.recFiles", r.recommendations.sumOf { it.count })
+            .putLong("last.recBytes", r.recommendedBytes)
             .putLong("freed", totalFreed(ctx) + r.purged.bytes)
-            .putStringSet("held", r.held.map { it.id.name }.toSet())
             .apply()
     }
 }
