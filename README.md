@@ -1,13 +1,16 @@
 # Kehraus
 
-Android-App, die das eigene Handy von selbst aufräumt: Regeln legen fest, was weg kann,
-ein Papierkorb mit Frist fängt alles auf, bevor es endgültig gelöscht wird.
+Android-App, die das eigene Handy aufräumt und sortiert, ohne von selbst etwas zu löschen.
+Regeln finden, was weg könnte, und empfehlen es; in den Papierkorb kommt nur, was man bestätigt,
+und der Papierkorb löscht nie von selbst.
 
 Gedacht für das eigene Gerät, nicht für den Play Store. Die App hat keinen Internetzugang.
 
 ## Regeln
 
-Jede Regel ist einzeln ein- und ausschaltbar. Nach der Installation sind alle aus.
+Regeln suchen, was weg könnte – sie verschieben nichts von selbst. Eingeschaltete Regeln erscheinen
+als Empfehlung auf der Übersicht und in einer Meldung; jede Regel hat einen Knopf „In den Papierkorb“,
+der erst nach einer Rückfrage verschiebt. Nach der Installation sind alle Regeln aus.
 
 | Regel | Durchsucht | Voreinstellung |
 | --- | --- | --- |
@@ -20,7 +23,7 @@ Jede Regel ist einzeln ein- und ausschaltbar. Nach der Installation sind alle au
 | Telegram-Dateien | alles, was Telegram im Gerätespeicher ablegt | älter als 60 Tage |
 | Installationsdateien | APK-Dateien im ganzen Gerätespeicher, außer in App-Ordnern | älter als 7 Tage |
 | Downloads | alles im Download-Ordner | älter als 90 Tage |
-| Exakte Duplikate | Dateien mit gleichem Inhalt im ganzen Gerätespeicher | ohne Frist |
+| Exakte Duplikate | Dateien mit gleichem Inhalt im ganzen Gerätespeicher | ohne Altersgrenze |
 
 Dazu als eigener Schalter: leere Ordner entfernen (in `Download`, `Pictures`, `DCIM`, `Movies`,
 `Documents`, `Music`; werden direkt gelöscht, da nichts aufzuheben ist).
@@ -34,19 +37,18 @@ Versteckte Dateien und Ordner bleiben immer unberührt.
 
 ## Sicherungen
 
-- **Papierkorb mit Frist:** nichts wird sofort gelöscht (siehe unten).
+- **Nur empfehlen:** Der tägliche Lauf sortiert und zählt, verschiebt aber nichts in den Papierkorb.
+- **Papierkorb ohne Frist:** Endgültig gelöscht wird nur, wenn man ihn selbst leert.
 - **Schutzliste:** Ordner (mit allem darunter) und einzelne Dateien, die keine Regel anfasst.
-- **Notbremse:** Würde eine Regel in einem Lauf mehr als 500 Dateien oder 5 GB verschieben, hält
-  sie an und wartet auf eine Bestätigung in der App. Das betrifft vor allem den ersten Lauf.
-- **Verlauf:** was wann von welcher Regel verschoben oder endgültig gelöscht wurde.
-- **Speicher knapp:** Unter 10 % freiem Speicher weist die App darauf hin, wie viel im Papierkorb liegt.
+- **Verlauf:** was wann einsortiert, verschoben oder endgültig gelöscht wurde.
+- **Erinnerungen:** höchstens einmal pro Woche, wenn die Regeln mehr als 500 MB empfehlen oder im
+  Papierkorb mehr als 1 GB liegt; dazu ein Hinweis bei weniger als 10 % freiem Speicher.
 
 ## Papierkorb
 
-Treffer werden nicht gelöscht, sondern nach `Kehraus/Papierkorb` im Gerätespeicher verschoben.
-Erst nach der Frist (Voreinstellung 30 Tage) löscht der nächste Lauf sie endgültig – bis dahin
-lässt sich jede Datei an ihren alten Platz zurücklegen. Platz wird also erst frei, wenn die Frist
-abgelaufen ist oder der Papierkorb von Hand geleert wird.
+Was man bestätigt, wird nicht gelöscht, sondern nach `Kehraus/Papierkorb` im Gerätespeicher
+verschoben. Dort bleibt es, bis man den Papierkorb leert – jede Datei lässt sich jederzeit an ihren
+alten Platz zurücklegen. Platz wird also erst frei, wenn der Papierkorb geleert wird.
 
 Die Liste, woher jede Datei kam (`index.tsv`), liegt neben den Dateien und nicht in den App-Daten.
 Der Papierkorb übersteht deshalb auch eine Neuinstallation.
@@ -57,7 +59,7 @@ Der Papierkorb übersteht deshalb auch eine Neuinstallation.
 2. In der App „Zugriff erlauben“ antippen und den Zugriff auf alle Dateien einschalten.
 3. Unter *Regeln* die Vorschau ansehen und einschalten, was passt.
 
-Aufgeräumt wird einmal am Tag im Hintergrund oder sofort über „Jetzt aufräumen“.
+Sortiert und geprüft wird einmal am Tag im Hintergrund oder sofort über „Jetzt sortieren und prüfen“.
 
 ## Bauen
 
@@ -82,8 +84,8 @@ Apps und ihre Daten zählen nicht mit, darauf hat die App keinen Zugriff.
 
 Exakte Duplikate (Inhalt Byte für Byte gleich) werden in Gruppen angezeigt. Es bleibt die Datei am
 besten Platz – Kameraordner vor Bilderordnern vor Downloads vor Messenger-Ordnern, bei Gleichstand die
-ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb. Wer mag, schaltet dasselbe unter *Regeln* als
-tägliche Regel ein.
+ältere. Die Kopien wandern auf Knopfdruck in den Papierkorb. Unter *Regeln* lassen sie sich zusätzlich
+als Empfehlung einschalten.
 
 Ebenfalls dort: Reste entfernter Apps – Ordner unter `Android/media`, deren App nicht mehr
 installiert ist.

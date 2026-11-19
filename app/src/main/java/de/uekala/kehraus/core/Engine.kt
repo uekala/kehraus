@@ -24,7 +24,10 @@ data class RunResult(
     val sorted: Int = 0,
     /** Pfade, an denen jetzt keine Datei mehr liegt (für die Mediathek des Geräts). */
     val changedPaths: List<String>,
+    /** Was die eingeschalteten Regeln im Moment finden – nur gezählt, nichts verschoben. */
+    val recommendations: List<Recommendation> = emptyList(),
 ) {
+    val recommendedBytes: Long get() = recommendations.sumOf { it.bytes }
     val moved: Int get() = rules.sumOf { it.moved }
     val movedBytes: Long get() = rules.sumOf { it.bytes }
     val failed: Int get() = rules.sumOf { it.failed }
@@ -36,8 +39,12 @@ data class Brake(val maxFiles: Int = 500, val maxBytes: Long = 5L * 1024 * Rules
     fun trips(hits: List<Hit>): Boolean = hits.size > maxFiles || hits.sumOf { it.size } > maxBytes
 }
 
+/** Was eine Regel gefunden hat. Ob es in den Papierkorb wandert, entscheidet der Nutzer. */
+data class Recommendation(val id: RuleId, val count: Int, val bytes: Long)
+
 data class RunOptions(
-    val retentionDays: Int = 30,
+    /** Nach wie vielen Tagen der Papierkorb endgültig löscht; null = nie von selbst. */
+    val retentionDays: Int? = null,
     val protection: Protection = Protection(),
     val brake: Brake = Brake(),
     /** Regeln, für die die Notbremse in diesem Lauf nicht gilt (vom Nutzer bestätigt). */
@@ -63,10 +70,37 @@ class Engine(private val root: File, val trash: Trash) {
             .map { Hit(File(it.path), it.size, it.modified) }
     }
 
+    /**
+     * Der tägliche Lauf und „Jetzt sortieren": Downloads einsortieren, leere Ordner entfernen (beides nur,
+     * wenn eingeschaltet) und zählen, was die eingeschalteten Regeln finden. In den Papierkorb wandert hier
+     * nichts, und der Papierkorb löscht nur, wenn eine Frist gesetzt ist.
+     */
     fun run(rules: List<RuleConfig>, options: RunOptions, now: Long): RunResult {
-        val purged = trash.purge(now, options.retentionDays)
+        val purged = purge(options, now)
         val changed = ArrayList<String>()
-        val results = rules.filter { it.enabled }.map { rule ->
+        var sorted = 0
+        if (options.sortJournal != null) {
+            val moves = DownloadSorter.plan(root, now, options.sortAgeDays, options.protection)
+            val done = DownloadSorter.apply(moves, options.sortJournal)
+            sorted = done.size
+            done.forEach { changed.add(it.from); changed.add(it.to) }
+        }
+        val emptied = if (options.removeEmptyDirs) EmptyDirs.remove(root, trash.dir, options.protection) else 0
+        val recommendations = rules.filter { it.enabled }.mapNotNull { rule ->
+            val hits = preview(rule, now, options.protection)
+            if (hits.isEmpty()) null else Recommendation(rule.id, hits.size, hits.sumOf { it.size })
+        }
+        return RunResult(now, emptyList(), purged, emptied, sorted, changed, recommendations)
+    }
+
+    /**
+     * Verschiebt die Treffer der übergebenen Regeln in den Papierkorb – nur auf ausdrücklichen Wunsch des
+     * Nutzers. Ob eine Regel eingeschaltet ist, spielt keine Rolle: Wer auf den Knopf tippt, meint diese Regel.
+     */
+    fun trash(rules: List<RuleConfig>, options: RunOptions, now: Long): RunResult {
+        val purged = purge(options, now)
+        val changed = ArrayList<String>()
+        val results = rules.map { rule ->
             val hits = preview(rule, now, options.protection)
             if (rule.id !in options.confirmed && options.brake.trips(hits)) {
                 return@map RuleResult(rule.id, 0, 0, 0, held = true, heldCount = hits.size, heldBytes = hits.sumOf { it.size })
@@ -85,16 +119,11 @@ class Engine(private val root: File, val trash: Trash) {
             }
             RuleResult(rule.id, moved, bytes, failed)
         }
-        var sorted = 0
-        if (options.sortJournal != null) {
-            val moves = DownloadSorter.plan(root, now, options.sortAgeDays, options.protection)
-            val done = DownloadSorter.apply(moves, options.sortJournal)
-            sorted = done.size
-            done.forEach { changed.add(it.from); changed.add(it.to) }
-        }
-        val emptied = if (options.removeEmptyDirs) EmptyDirs.remove(root, trash.dir, options.protection) else 0
-        return RunResult(now, results, purged, emptied, sorted, changed)
+        return RunResult(now, results, purged, 0, 0, changed)
     }
+
+    private fun purge(options: RunOptions, now: Long): Freed =
+        options.retentionDays?.let { trash.purge(now, it) } ?: Freed(0, 0)
 }
 
 /** Entfernt leere Ordner in den üblichen Ablageorten. Die Ablageorte selbst und bekannte Systemordner bleiben. */

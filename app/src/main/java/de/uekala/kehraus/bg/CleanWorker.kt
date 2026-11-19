@@ -15,7 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
-/** Der tägliche Lauf im Hintergrund. */
+/** Der tägliche Lauf im Hintergrund: sortieren, Empfehlungen zählen, erinnern. Er verschiebt nichts in den Papierkorb. */
 class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -28,9 +28,19 @@ class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
         }
         if (result != null && Prefs.notify(ctx)) {
             Notifier.report(ctx, result)
+            val now = System.currentTimeMillis()
+            if (result.recommendedBytes >= RECOMMEND_HINT_BYTES && now - Prefs.recommendHintAt(ctx) >= WEEK) {
+                Notifier.recommend(ctx, result)
+                Prefs.setRecommendHintAt(ctx, now)
+            }
             runCatching {
+                val trashBytes = Storage.trash().entries().sumOf { it.size }
+                if (trashBytes >= TRASH_HINT_BYTES && now - Prefs.trashHintAt(ctx) >= WEEK) {
+                    Notifier.trashHint(ctx, trashBytes)
+                    Prefs.setTrashHintAt(ctx, now)
+                }
                 val info = Storage.info()
-                if (info != null) Notifier.lowStorage(ctx, info, Storage.trash().entries().sumOf { it.size })
+                if (info != null) Notifier.lowStorage(ctx, info, trashBytes)
             }
         }
         if (Prefs.notify(ctx)) runCatching { remindCache(ctx) }
@@ -40,7 +50,7 @@ class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
     /** Höchstens einmal pro Woche, und nur wenn wirklich viel zusammengekommen ist. */
     private fun remindCache(ctx: Context) {
         val now = System.currentTimeMillis()
-        if (!Apps.hasUsageAccess(ctx) || now - Prefs.cacheHintAt(ctx) < 7 * Rules.DAY_MS) return
+        if (!Apps.hasUsageAccess(ctx) || now - Prefs.cacheHintAt(ctx) < WEEK) return
         val cache = Apps.load(ctx).sumOf { it.cacheBytes }
         if (cache < CACHE_HINT_BYTES) return
         Notifier.cacheHint(ctx, cache)
@@ -49,6 +59,9 @@ class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
 
     companion object {
         private const val CACHE_HINT_BYTES = 5L * 1024 * 1024 * 1024
+        private const val RECOMMEND_HINT_BYTES = 500L * 1024 * 1024
+        private const val TRASH_HINT_BYTES = 1024L * 1024 * 1024
+        private const val WEEK = 7 * Rules.DAY_MS
 
         private const val NAME = "kehraus-taeglich"
 

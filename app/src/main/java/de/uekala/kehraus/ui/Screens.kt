@@ -91,7 +91,6 @@ import java.util.Date
 import java.util.Locale
 
 private val AGE_OPTIONS = listOf(7, 14, 30, 60, 90, 180, 365)
-private val RETENTION_OPTIONS = listOf(7, 14, 30, 60, 90)
 private val SIZE_OPTIONS = listOf(50, 100, 200, 500, 1000)
 
 private fun days(n: Int): String = when (n) {
@@ -152,27 +151,6 @@ fun App(vm: MainViewModel) {
             }
         }
     }
-
-    val ask = vm.askHeld
-    if (ask.isNotEmpty()) {
-        AlertDialog(
-            onDismissRequest = { vm.dismissHeld() },
-            title = { Text("Ungewöhnlich viel auf einmal") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Diese Regeln wurden angehalten, weil sie sehr viel verschieben würden:")
-                    ask.forEach { r ->
-                        Text("${r.id.fullTitle}: ${files(r.heldCount)} · ${vm.size(r.heldBytes)}", color = TextMain, fontWeight = FontWeight.Medium)
-                    }
-                    Dim("Alles landet im Papierkorb und lässt sich bis zum Ablauf der Frist zurücklegen. Unter „Regeln“ kannst du vorher ansehen, was getroffen wird.", size = 13)
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { vm.runNow(confirmed = ask.map { it.id }.toSet()) }) { Text("Ausführen") }
-            },
-            dismissButton = { TextButton(onClick = { vm.dismissHeld() }) { Text("Nicht jetzt") } },
-        )
-    }
 }
 
 // ---------- Übersicht ----------
@@ -231,50 +209,61 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () 
             }
         }
 
-        if (vm.held.isNotEmpty() && vm.askHeld.isEmpty()) {
-            Panel("Wartet auf dich") {
-                Dim("Angehalten, weil ungewöhnlich viel getroffen würde: ${vm.held.joinToString(", ") { it.fullTitle }}.")
-                OutlinedButton(onClick = { vm.runNow() }, enabled = vm.hasAccess && !vm.busy) { Text("Prüfen") }
+        val active = vm.rules.filter { it.enabled }
+        val recs = active.mapNotNull { r -> vm.previews[r.id]?.takeIf { it.count > 0 }?.let { r.id to it } }
+        Panel("Empfehlungen") {
+            when {
+                active.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Dim("Noch ist keine Regel eingeschaltet.", Modifier.weight(1f))
+                    TextButton(onClick = onOpenRules) { Text("Regeln") }
+                }
+                recs.isEmpty() -> Dim("Im Moment gibt es nichts zu empfehlen.")
+                else -> {
+                    Text("${files(recs.sumOf { it.second.count })} · ${vm.size(recs.sumOf { it.second.bytes })} könnten weg", color = Accent)
+                    recs.forEach { (id, p) -> KeyValue(id.fullTitle, "${files(p.count)} · ${vm.size(p.bytes)}") }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dim("Kehraus verschiebt nichts von selbst – du entscheidest unter „Regeln“.", Modifier.weight(1f), size = 12)
+                        TextButton(onClick = onOpenRules) { Text("Ansehen") }
+                    }
+                }
             }
         }
 
-        Panel("Aufräumen") {
-            val anyEnabled = vm.rules.any { it.enabled }
+        Panel("Sortieren") {
             val last = vm.lastRun
             if (last == null) {
                 Dim("Noch kein Lauf.")
             } else {
                 KeyValue("Letzter Lauf", dateTime(last.at))
-                KeyValue(
-                    "Verschoben",
-                    if (last.moved == 0) "nichts" else "${files(last.moved)} · ${vm.size(last.bytes)}",
-                )
-                if (last.failed > 0) {
-                    Text("${files(last.failed)} ließen sich nicht verschieben.", color = Warn, fontSize = 13.sp)
-                }
+                KeyValue("Einsortiert", if (last.sorted == 0) "nichts" else files(last.sorted))
+                if (last.emptyDirs > 0) KeyValue("Leere Ordner entfernt", "${last.emptyDirs}")
             }
             Button(
                 onClick = { vm.runNow() },
-                enabled = vm.hasAccess && (anyEnabled || vm.sortDownloads || vm.emptyDirs) && !vm.busy,
+                enabled = vm.hasAccess && !vm.busy,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (vm.busy) "Räumt auf …" else "Jetzt aufräumen") }
-            if (!anyEnabled && !vm.sortDownloads && !vm.emptyDirs) {
+            ) { Text(if (vm.busy) "Läuft …" else "Jetzt sortieren und prüfen") }
+            if (!vm.sortDownloads && !vm.emptyDirs) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Dim("Noch ist keine Regel eingeschaltet.", Modifier.weight(1f))
+                    Dim("Sortieren ist aus. Einschalten unter „Regeln“ bei „Weitere Aufgaben“.", Modifier.weight(1f), size = 12)
                     TextButton(onClick = onOpenRules) { Text("Regeln") }
                 }
             }
         }
 
         Panel("Papierkorb") {
-            KeyValue("Wartet auf Ablauf der Frist", "${files(vm.trash.size)} · ${vm.size(vm.trashBytes)}")
+            KeyValue("Im Papierkorb", "${files(vm.trash.size)} · ${vm.size(vm.trashBytes)}")
             KeyValue("Bisher endgültig gelöscht", vm.size(vm.totalFreed))
-            Dim("Platz wird erst frei, wenn die Frist abgelaufen ist oder du den Papierkorb leerst.", size = 12)
+            Dim("Der Papierkorb löscht nichts von selbst. Platz wird erst frei, wenn du ihn leerst.", size = 12)
         }
 
         Panel("Automatik") {
-            SwitchRow("Täglich aufräumen", "Einmal am Tag im Hintergrund, nicht bei schwachem Akku.", vm.auto) { vm.updateAuto(it) }
-            SwitchRow("Melden, wenn etwas passiert ist", null, vm.notify) { vm.updateNotify(it) }
+            SwitchRow(
+                "Täglich sortieren und prüfen",
+                "Einmal am Tag im Hintergrund, nicht bei schwachem Akku. Verschiebt nichts in den Papierkorb.",
+                vm.auto,
+            ) { vm.updateAuto(it) }
+            SwitchRow("Melden, wenn es etwas gibt", "Was einsortiert wurde, Empfehlungen und ein voller Papierkorb – höchstens einmal pro Woche.", vm.notify) { vm.updateNotify(it) }
         }
 
         if (vm.history.isNotEmpty()) {
@@ -313,16 +302,17 @@ private fun historyDetail(vm: MainViewModel, e: HistoryEntry): String = when {
 @Composable
 private fun RulesScreen(vm: MainViewModel) {
     var showHits by remember { mutableStateOf<RuleId?>(null) }
+    var confirmTrash by remember { mutableStateOf<RuleId?>(null) }
     var pickFolder by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Heading("Regeln")
-        Dim("Eingeschaltete Regeln verschieben ihre Treffer in den Papierkorb – beim täglichen Lauf oder über „Jetzt aufräumen“.")
+        Dim("Regeln suchen, was weg könnte. Sie verschieben nichts von selbst: Eingeschaltete Regeln erscheinen als Empfehlung auf der Übersicht. In den Papierkorb kommt nur, was du hier per Knopf bestätigst.")
         Group.entries.forEach { group ->
             SectionTitle(group.title)
-            vm.rules.filter { it.id.group == group }.forEach { rule -> RuleCard(vm, rule) { showHits = rule.id } }
+            vm.rules.filter { it.id.group == group }.forEach { rule -> RuleCard(vm, rule, onShow = { showHits = rule.id }, onTrash = { confirmTrash = rule.id }) }
         }
 
         SectionTitle("Weitere Aufgaben")
@@ -369,6 +359,23 @@ private fun RulesScreen(vm: MainViewModel) {
         }
     }
     showHits?.let { id -> HitsDialog(vm, id) { showHits = null } }
+    confirmTrash?.let { id ->
+        val p = vm.previews[id]
+        AlertDialog(
+            onDismissRequest = { confirmTrash = null },
+            title = { Text("In den Papierkorb verschieben?") },
+            text = {
+                Text(
+                    "${files(p?.count ?: 0)} (${vm.size(p?.bytes ?: 0)}) aus „${id.fullTitle}“ wandern in den Papierkorb. " +
+                        "Dort bleiben sie, bis du ihn leerst – zurücklegen geht jederzeit."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.trashRule(id); confirmTrash = null }) { Text("Verschieben") }
+            },
+            dismissButton = { TextButton(onClick = { confirmTrash = null }) { Text("Abbrechen") } },
+        )
+    }
     if (pickFolder) {
         FolderPicker(
             onPick = { vm.protectFolder(it.absolutePath); pickFolder = false },
@@ -421,7 +428,7 @@ private fun PickerRow(text: String, color: androidx.compose.ui.graphics.Color, o
 }
 
 @Composable
-private fun RuleCard(vm: MainViewModel, rule: RuleConfig, onShow: () -> Unit) {
+private fun RuleCard(vm: MainViewModel, rule: RuleConfig, onShow: () -> Unit, onTrash: () -> Unit) {
     Panel(
         title = rule.id.title,
         trailing = { Switch(checked = rule.enabled, onCheckedChange = { vm.setRule(rule.copy(enabled = it)) }) },
@@ -448,6 +455,9 @@ private fun RuleCard(vm: MainViewModel, rule: RuleConfig, onShow: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             if (p != null && p.count > 0) TextButton(onClick = onShow) { Text("Ansehen") }
+        }
+        if (p != null && p.count > 0) {
+            OutlinedButton(onClick = onTrash, enabled = !vm.busy) { Text("In den Papierkorb …") }
         }
     }
 }
@@ -784,7 +794,6 @@ private fun TrashScreen(vm: MainViewModel) {
     var selected by remember { mutableStateOf<TrashEntry?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
     val store = remember { Storage.trash() }
-    val now = remember(vm.trash) { System.currentTimeMillis() }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -799,7 +808,7 @@ private fun TrashScreen(vm: MainViewModel) {
                     else "${files(vm.trash.size)} · ${vm.size(vm.trashBytes)}",
                     color = TextMain,
                 )
-                Stepper("Endgültig löschen nach", vm.retentionDays, RETENTION_OPTIONS, ::days) { vm.updateRetention(it) }
+                Dim("Der Papierkorb löscht nichts von selbst. Erst „Leeren“ gibt den Platz frei.", size = 13)
                 if (vm.trash.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
@@ -826,7 +835,7 @@ private fun TrashScreen(vm: MainViewModel) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(e.name, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Dim("${folderOf(e)} · ${vm.size(e.size)} · ${remaining(e, vm.retentionDays, now)}", size = 12)
+                    Dim("${folderOf(e)} · ${vm.size(e.size)} · seit ${dateTime(e.trashedAt).substringBefore(',')}", size = 12)
                 }
             }
         }
@@ -877,13 +886,6 @@ private fun ruleTitle(name: String): String = when (name) {
     MainViewModel.DUPLICATE -> "Duplikat"
     MainViewModel.ORPHAN -> "Rest einer entfernten App"
     else -> RuleId.entries.firstOrNull { it.name == name }?.fullTitle ?: name
-}
-
-private fun remaining(e: TrashEntry, retentionDays: Int, now: Long): String {
-    val left = e.expiresAt(retentionDays) - now
-    if (left <= 0) return "wird beim nächsten Lauf gelöscht"
-    val d = ((left + Rules.DAY_MS - 1) / Rules.DAY_MS).toInt()
-    return "noch ${days(d)}"
 }
 
 // ---------- Bausteine ----------

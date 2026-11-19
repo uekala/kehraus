@@ -38,8 +38,8 @@ class EngineTest {
         return f
     }
 
-    private fun Engine.run(rules: List<RuleConfig>, retention: Int, at: Long) =
-        run(rules, RunOptions(retentionDays = retention), at)
+    private fun Engine.trash(rules: List<RuleConfig>, retention: Int, at: Long) =
+        trash(rules, RunOptions(retentionDays = retention), at)
 
     private fun on(id: RuleId, ageDays: Int = id.defaultAgeDays, minSizeMb: Int = id.defaultMinSizeMb) =
         RuleConfig(id, enabled = true, ageDays = ageDays, minSizeMb = minSizeMb)
@@ -50,7 +50,7 @@ class EngineTest {
         val fresh = file("Pictures/Screenshots/neu.png", 29)
         val camera = file("DCIM/Camera/foto.jpg", 400)
 
-        val result = engine.run(listOf(on(RuleId.SCREENSHOTS)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.SCREENSHOTS)), 30, now)
 
         assertEquals(1, result.moved)
         assertEquals(10L, result.movedBytes)
@@ -62,12 +62,32 @@ class EngineTest {
     }
 
     @Test
-    fun `ausgeschaltete Regeln tun nichts`() {
-        val old = file("Pictures/Screenshots/alt.png", 300)
-        val result = engine.run(listOf(RuleConfig(RuleId.SCREENSHOTS, enabled = false)), 30, now)
-        assertEquals(0, result.moved)
-        assertTrue(old.exists())
+    fun `der Lauf verschiebt nichts und empfiehlt nur eingeschaltete Regeln`() {
+        val shot = file("Pictures/Screenshots/alt.png", 300, bytes = 7)
+        val dl = file("Download/alt.zip", 300, bytes = 5)
+
+        val result = engine.run(
+            listOf(on(RuleId.SCREENSHOTS), RuleConfig(RuleId.DOWNLOADS, enabled = false)),
+            RunOptions(retentionDays = null),
+            now,
+        )
+
+        assertTrue(shot.exists() && dl.exists())
         assertTrue(trash.entries().isEmpty())
+        assertEquals(0, result.moved)
+        assertEquals(listOf(Recommendation(RuleId.SCREENSHOTS, 1, 7)), result.recommendations)
+        assertEquals(7L, result.recommendedBytes)
+    }
+
+    @Test
+    fun `ohne Frist löscht der Papierkorb nie von selbst`() {
+        file("Download/a.bin", 400, bytes = 3)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), RunOptions(), now)
+
+        val muchLater = engine.run(emptyList(), RunOptions(), now + 3650 * day)
+
+        assertEquals(Freed(0, 0), muchLater.purged)
+        assertEquals(1, trash.entries().size)
     }
 
     @Test
@@ -88,7 +108,7 @@ class EngineTest {
         val nomedia = file("$base/WhatsApp Images/Sent/.nomedia", 900)
         val hiddenDir = file("$base/WhatsApp Images/.Statuses/status.jpg", 900)
 
-        val result = engine.run(listOf(on(RuleId.WHATSAPP)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.WHATSAPP)), 30, now)
 
         assertEquals(3, result.moved)
         assertFalse(img.exists() || sent.exists() || vid.exists())
@@ -104,7 +124,7 @@ class EngineTest {
         val young = file("Movies/neu.mp4", 5, bytes = 2 * 1024 * 1024)
         val photo = file("DCIM/Camera/riesig.jpg", 200, bytes = 2 * 1024 * 1024)
 
-        val result = engine.run(listOf(on(RuleId.BIG_VIDEOS, ageDays = 180, minSizeMb = 1)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.BIG_VIDEOS, ageDays = 180, minSizeMb = 1)), 30, now)
 
         assertEquals(1, result.moved)
         assertFalse(big.exists())
@@ -117,10 +137,10 @@ class EngineTest {
         val inside = Trash(File(root, "Download/Papierkorb"))
         val e = Engine(root, inside)
         val old = file("Download/alt.zip", 500)
-        e.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        e.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
         assertFalse(old.exists())
 
-        val again = e.run(RuleId.entries.map { on(it, ageDays = 1, minSizeMb = 0) }, 30, now)
+        val again = e.trash(RuleId.entries.map { on(it, ageDays = 1, minSizeMb = 0) }, 30, now)
 
         assertEquals(0, again.moved)
         assertEquals(1, inside.entries().size)
@@ -129,7 +149,7 @@ class EngineTest {
     @Test
     fun `Wiederherstellen legt die Datei an den alten Platz`() {
         val f = file("Download/wichtig.pdf", 100, bytes = 42)
-        engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
         val entry = trash.entries().single()
         assertEquals("wichtig.pdf", entry.name)
         assertEquals(42L, entry.size)
@@ -145,7 +165,7 @@ class EngineTest {
     @Test
     fun `Wiederherstellen überschreibt nichts`() {
         val f = file("Download/liste.txt", 100)
-        engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
         f.writeText("neue Datei mit gleichem Namen")
 
         val restored = trash.restore(trash.entries().single().id)
@@ -157,14 +177,14 @@ class EngineTest {
     @Test
     fun `endgültig gelöscht wird erst nach Ablauf der Frist`() {
         file("Download/a.bin", 100, bytes = 7)
-        engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
         val stored = trash.fileOf(trash.entries().single())
 
-        val early = engine.run(emptyList(), 30, now + 29 * day)
+        val early = engine.trash(emptyList(), 30, now + 29 * day)
         assertEquals(Freed(0, 0), early.purged)
         assertTrue(stored.exists())
 
-        val late = engine.run(emptyList(), 30, now + 30 * day)
+        val late = engine.trash(emptyList(), 30, now + 30 * day)
         assertEquals(Freed(1, 7), late.purged)
         assertFalse(stored.exists())
         assertTrue(trash.entries().isEmpty())
@@ -174,7 +194,7 @@ class EngineTest {
     fun `eine zweite Instanz liest denselben Papierkorb`() {
         file("Download/a.bin", 100)
         file("Download/b.bin", 100)
-        engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
 
         val other = Trash(File(root, "Kehraus/Papierkorb"))
         assertEquals(2, other.entries().size)
@@ -185,7 +205,7 @@ class EngineTest {
     @Test
     fun `Eintrag ohne Datei wird aussortiert und kaputte Zeilen stören nicht`() {
         file("Download/a.bin", 100)
-        engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
         val index = File(trash.dir, "index.tsv")
         index.appendText("kaputt\n")
         index.appendText(Trash.format(TrashEntry("verwaist", "/x/y.jpg", now, 1, "DOWNLOADS")) + "\n")
@@ -199,7 +219,7 @@ class EngineTest {
         val e = TrashEntry("id", "/sdcard/Download/a\tb\\c\nd.pdf", 5, 6, "DOWNLOADS")
         assertEquals(e, Trash.parse(Trash.format(e)))
         val f = file("Download/Urlaub (2) – Fotos & Öl.zip", 100)
-        engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now)
+        engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now)
         assertNotNull(trash.restore(trash.entries().single().id))
         assertTrue(f.exists())
     }
@@ -207,7 +227,7 @@ class EngineTest {
     @Test
     fun `Papierkorb enthält nomedia damit die Galerie ihn nicht zeigt`() {
         file("Pictures/Screenshots/alt.png", 100)
-        engine.run(listOf(on(RuleId.SCREENSHOTS)), 30, now)
+        engine.trash(listOf(on(RuleId.SCREENSHOTS)), 30, now)
         assertTrue(File(trash.dir, ".nomedia").exists())
     }
 
@@ -231,7 +251,7 @@ class EngineTest {
         val received = file("$wa/WhatsApp Images/IMG-2.jpg", 20)
         val fresh = file("$wa/WhatsApp Video/Sent/VID-1.mp4", 3)
 
-        val result = engine.run(listOf(on(RuleId.WHATSAPP_SENT)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.WHATSAPP_SENT)), 30, now)
 
         assertEquals(2, result.moved)
         assertFalse(sent.exists() || sentDoc.exists())
@@ -244,7 +264,7 @@ class EngineTest {
         val audio = file("$wa/WhatsApp Audio/AUD-1.m4a", 120)
         val image = file("$wa/WhatsApp Images/IMG-1.jpg", 120)
 
-        val result = engine.run(listOf(on(RuleId.WHATSAPP_VOICE)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.WHATSAPP_VOICE)), 30, now)
 
         assertEquals(2, result.moved)
         assertFalse(voice.exists() || audio.exists())
@@ -257,7 +277,7 @@ class EngineTest {
         val pdf = file("Download/rechnung.pdf", 10)
         val young = file("Download/neu.apk", 2)
 
-        val result = engine.run(listOf(on(RuleId.APKS)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.APKS)), 30, now)
 
         assertEquals(1, result.moved)
         assertFalse(apk.exists())
@@ -270,7 +290,7 @@ class EngineTest {
         val doc = file("Android/media/org.telegram.messenger/Telegram/Telegram Documents/a.pdf", 90)
         val other = file("Pictures/Urlaub/IMG_2.jpg", 900)
 
-        val result = engine.run(listOf(on(RuleId.TELEGRAM)), 30, now)
+        val result = engine.trash(listOf(on(RuleId.TELEGRAM)), 30, now)
 
         assertEquals(2, result.moved)
         assertFalse(img.exists() || doc.exists())
@@ -288,7 +308,7 @@ class EngineTest {
         )
 
         assertEquals(listOf(normal.absolutePath), engine.preview(on(RuleId.DOWNLOADS), now, protection).map { it.file.absolutePath })
-        val result = engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(protection = protection), now)
+        val result = engine.trash(listOf(on(RuleId.DOWNLOADS)), RunOptions(protection = protection), now)
 
         assertEquals(1, result.moved)
         assertTrue(safeDir.exists() && safeFile.exists())
@@ -299,7 +319,7 @@ class EngineTest {
     fun `ein geschützter Ablageort schützt alles darunter`() {
         val f = file("Download/alt.zip", 400)
         val protection = Protection(folders = setOf(File(root, "Download").absolutePath))
-        assertEquals(0, engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(protection = protection), now).moved)
+        assertEquals(0, engine.trash(listOf(on(RuleId.DOWNLOADS)), RunOptions(protection = protection), now).moved)
         assertTrue(f.exists())
     }
 
@@ -308,7 +328,7 @@ class EngineTest {
         val files = (1..4).map { file("Download/alt-$it.bin", 400, bytes = 5) }
         val options = RunOptions(brake = Brake(maxFiles = 3))
 
-        val held = engine.run(listOf(on(RuleId.DOWNLOADS)), options, now)
+        val held = engine.trash(listOf(on(RuleId.DOWNLOADS)), options, now)
 
         assertEquals(0, held.moved)
         assertEquals(listOf(RuleId.DOWNLOADS), held.held.map { it.id })
@@ -316,7 +336,7 @@ class EngineTest {
         assertEquals(20L, held.held.single().heldBytes)
         assertTrue(files.all { it.exists() })
 
-        val confirmed = engine.run(listOf(on(RuleId.DOWNLOADS)), options.copy(confirmed = setOf(RuleId.DOWNLOADS)), now)
+        val confirmed = engine.trash(listOf(on(RuleId.DOWNLOADS)), options.copy(confirmed = setOf(RuleId.DOWNLOADS)), now)
 
         assertEquals(4, confirmed.moved)
         assertTrue(confirmed.held.isEmpty())
@@ -326,8 +346,8 @@ class EngineTest {
     fun `Notbremse greift auch bei zu vielen Bytes und lässt kleine Mengen durch`() {
         file("Download/a.bin", 400, bytes = 600)
         file("Download/b.bin", 400, bytes = 600)
-        assertTrue(engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 10, maxBytes = 1000)), now).held.isNotEmpty())
-        assertEquals(2, engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 10, maxBytes = 1200)), now).moved)
+        assertTrue(engine.trash(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 10, maxBytes = 1000)), now).held.isNotEmpty())
+        assertEquals(2, engine.trash(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 10, maxBytes = 1200)), now).moved)
     }
 
     @Test
@@ -362,14 +382,14 @@ class EngineTest {
     @Test
     fun `Verlauf merkt sich nur Läufe in denen etwas passiert ist`() {
         val history = History(File(root, "app/verlauf.tsv"), keep = 3)
-        history.record(engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now))
+        history.record(engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now))
         assertTrue(history.entries().isEmpty())
 
         file("Download/a.bin", 400, bytes = 9)
-        history.record(engine.run(listOf(on(RuleId.DOWNLOADS)), 30, now))
+        history.record(engine.trash(listOf(on(RuleId.DOWNLOADS)), 30, now))
         assertEquals(listOf(HistoryEntry(now, "DOWNLOADS", 1, 9)), history.entries())
 
-        history.record(engine.run(emptyList(), 30, now + 40 * day))
+        history.record(engine.trash(emptyList(), 30, now + 40 * day))
         assertEquals(HistoryEntry(now + 40 * day, HistoryEntry.PURGED, 1, 9), history.entries().first())
     }
 
@@ -379,7 +399,7 @@ class EngineTest {
         repeat(5) { i ->
             file("Download/x-$i.bin", 400)
             file("Download/y-$i.bin", 400)
-            history.record(engine.run(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 1)), now + i))
+            history.record(engine.trash(listOf(on(RuleId.DOWNLOADS)), RunOptions(brake = Brake(maxFiles = 1)), now + i))
         }
         val entries = history.entries()
         assertEquals(3, entries.size)
@@ -400,14 +420,14 @@ class EngineTest {
         val rule = listOf(on(RuleId.DUPLICATES))
 
         assertEquals(2, engine.preview(on(RuleId.DUPLICATES), now).size)
-        assertTrue(engine.run(rule, RunOptions(brake = Brake(maxFiles = 1)), now).held.isNotEmpty())
+        assertTrue(engine.trash(rule, RunOptions(brake = Brake(maxFiles = 1)), now).held.isNotEmpty())
         val guarded = Protection(files = setOf(download.absolutePath))
-        val result = engine.run(rule, RunOptions(protection = guarded), now)
+        val result = engine.trash(rule, RunOptions(protection = guarded), now)
 
         assertEquals(1, result.moved)
         assertTrue(camera.exists() && download.exists())
         assertFalse(whatsapp.exists())
         assertEquals("DUPLICATES", trash.entries().single().rule)
-        assertEquals(0, engine.run(rule, RunOptions(protection = guarded), now).moved)
+        assertEquals(0, engine.trash(rule, RunOptions(protection = guarded), now).moved)
     }
 }
