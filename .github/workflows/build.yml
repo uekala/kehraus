@@ -6,6 +6,8 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+      - 'tools/bilder/**'
+      - '.github/workflows/app-bilder.yml'
   pull_request:
   workflow_dispatch:
 
