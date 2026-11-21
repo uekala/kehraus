@@ -22,7 +22,8 @@ class CleanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
         val ctx = applicationContext
         if (!Prefs.auto(ctx)) return@withContext Result.success()
         val result = try {
-            Runner.run(ctx)
+            // WorkManager gibt einem Lauf rund zehn Minuten; die Texterkennung bekommt davon höchstens sechs.
+            Runner.run(ctx, ocrBudgetMs = 6 * 60_000L)
         } catch (e: Exception) {
             return@withContext Result.retry()
         }

@@ -6,7 +6,7 @@ Android-App, die das eigene Handy aufräumt und sortiert, ohne von selbst etwas 
 Regeln finden, was weg könnte, und empfehlen es; in den Papierkorb kommt nur, was man bestätigt,
 und der Papierkorb löscht nie von selbst.
 
-Gedacht für das eigene Gerät, nicht für den Play Store. Die App hat keinen Internetzugang.
+Gedacht für das eigene Gerät, nicht für den Play Store. Die App hat keinen Internetzugang – auch die Texterkennung arbeitet nur auf dem Gerät.
 
 ## Regeln
 
@@ -30,9 +30,23 @@ der erst nach einer Rückfrage verschiebt. Nach der Installation sind alle Regel
 Dazu als eigener Schalter: leere Ordner entfernen (in `Download`, `Pictures`, `DCIM`, `Movies`,
 `Documents`, `Music`; werden direkt gelöscht, da nichts aufzuheben ist).
 
-Ebenfalls als eigener Schalter: Downloads nach Art sortieren. Lose Dateien im Download-Ordner, die
-älter als 7 Tage sind, wandern in Unterordner (Dokumente, Bilder, Videos, Audio, Archive,
-Installationsdateien). Gelöscht wird dabei nichts, und die Sortierung lässt sich zurücknehmen.
+## Sortieren
+
+Sortieren verschiebt nur in Ordner, löscht nichts und lässt sich je Sortierung zurücknehmen. Jede
+Sortierung hat einen eigenen Schalter (nach der Installation aus) und läuft täglich sowie über
+„Jetzt sortieren und prüfen“.
+
+- **Downloads nach Art:** lose Dateien im Download-Ordner, älter als 7 Tage, wandern in Unterordner
+  (Dokumente, Bilder, Videos, Audio, Archive, Installationsdateien).
+- **Screenshots nach Monat:** Screenshots aus früheren Monaten wandern in Unterordner wie `2026-10`;
+  der laufende Monat bleibt liegen.
+- **Belege und Dokumente:** Eine Texterkennung direkt auf dem Gerät (ML Kit, ohne Internet) prüft Fotos
+  aus Kamera und WhatsApp. Rechnungen, Kassenbons und Briefe wandern nach `Pictures/Dokumente`. Jedes
+  Foto wird nur einmal geprüft; pro Lauf schafft die Erkennung einige Hundert. Sichert Google Fotos nur
+  den Kameraordner, sind einsortierte Belege danach nicht mehr in der Sicherung.
+
+Bei der Regel für WhatsApp-Bilder legt „Behalten“ ein Bild ins Album `Pictures/WhatsApp behalten`;
+dort empfiehlt es keine Regel mehr.
 
 Jede Regel zeigt vorab, wie viele Dateien sie im Moment treffen würde, und listet sie auf.
 Versteckte Dateien und Ordner bleiben immer unberührt.

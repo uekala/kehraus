@@ -20,7 +20,7 @@ object Notifier {
     /** Meldet, was der tägliche Lauf einsortiert hat – nur wenn wirklich etwas passiert ist. */
     fun report(ctx: Context, r: RunResult) {
         val parts = ArrayList<String>()
-        if (r.sorted > 0) parts += "${files(r.sorted)} im Download-Ordner einsortiert"
+        if (r.sorted > 0) parts += "${files(r.sorted)} einsortiert"
         if (r.emptyDirs > 0) parts += "${r.emptyDirs} leere Ordner entfernt"
         if (parts.isEmpty()) return
         show(ctx, 1, "Kehraus hat sortiert", parts.joinToString(" · "))

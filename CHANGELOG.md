@@ -23,3 +23,6 @@
 - Der Papierkorb löscht nie von selbst, die Frist entfällt; Erinnerung ab 1 GB im Papierkorb
 - Übersicht mit Empfehlungen; „Jetzt sortieren und prüfen“ statt „Jetzt aufräumen“
 - Eigenes Logo (Besen mit Funkeln), mit einfarbiger Fassung für Themen-Symbole
+- Screenshots nach Monat in Unterordner sortieren, mit Zurücknehmen
+- Belege und Dokumente per Texterkennung auf dem Gerät erkennen und nach Pictures/Dokumente sortieren, mit Zurücknehmen
+- WhatsApp-Bilder per „Behalten“ in ein eigenes Album legen; Vorschaubilder in der Trefferliste
