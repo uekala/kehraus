@@ -8,6 +8,10 @@
         tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Kehraus bleibt offline. Die Texterkennung bringt eigene Netzrechte für Nutzungsstatistiken mit – entfernt. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
     <!-- App-Übersicht: alle installierten Apps sehen und deren Größe und letzte Nutzung lesen. -->
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"

@@ -34,6 +34,15 @@ jobs:
       - name: APK bauen
         run: ./gradlew --no-daemon assembleRelease
 
+      - name: Prüfen, dass die App kein Internet anfordert
+        run: |
+          AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2"
+          "$AAPT2" dump permissions app/build/outputs/apk/release/app-release.apk | tee rechte.txt
+          if grep -q "android.permission.INTERNET" rechte.txt; then
+            echo "::error::Die APK fordert Internetzugang an."
+            exit 1
+          fi
+
       - name: APK benennen
         run: cp app/build/outputs/apk/release/app-release.apk "kehraus-${VERSION_NAME}.apk"
 

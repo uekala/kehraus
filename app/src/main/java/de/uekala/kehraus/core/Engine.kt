@@ -52,6 +52,8 @@ data class RunOptions(
     val removeEmptyDirs: Boolean = false,
     /** Wenn gesetzt, werden Downloads nach Art einsortiert; die Datei merkt sich die Verschiebungen zum Zurücknehmen. */
     val sortJournal: File? = null,
+    /** Wenn gesetzt, werden Screenshots in Monatsordner aufgeteilt; die Datei merkt sich die Verschiebungen. */
+    val screenshotJournal: File? = null,
     val sortAgeDays: Int = 7,
 )
 
@@ -83,6 +85,11 @@ class Engine(private val root: File, val trash: Trash) {
             val moves = DownloadSorter.plan(root, now, options.sortAgeDays, options.protection)
             val done = DownloadSorter.apply(moves, options.sortJournal)
             sorted = done.size
+            done.forEach { changed.add(it.from); changed.add(it.to) }
+        }
+        if (options.screenshotJournal != null) {
+            val done = Journal.apply(ScreenshotSorter.plan(root, now, options.protection), options.screenshotJournal)
+            sorted += done.size
             done.forEach { changed.add(it.from); changed.add(it.to) }
         }
         val emptied = if (options.removeEmptyDirs) EmptyDirs.remove(root, trash.dir, options.protection) else 0

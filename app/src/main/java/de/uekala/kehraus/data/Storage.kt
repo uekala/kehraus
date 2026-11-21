@@ -28,6 +28,11 @@ object Storage {
 
     /** Merkt sich, was beim Sortieren der Downloads wohin verschoben wurde. */
     fun sortJournal(ctx: Context): File = File(ctx.filesDir, "sortierung.tsv")
+    fun screenshotJournal(ctx: Context): File = File(ctx.filesDir, "screenshots-monate.tsv")
+    fun docJournal(ctx: Context): File = File(ctx.filesDir, "dokumente.tsv")
+
+    /** Welche Fotos die Texterkennung schon gesehen hat und was dabei herauskam. */
+    fun docCache(ctx: Context): File = File(ctx.filesDir, "texterkennung.tsv")
 
     /** Pfad ohne den Gerätespeicher davor, zur Anzeige. */
     fun relative(path: String): String = path.removePrefix(root.absolutePath).trimStart('/').ifEmpty { "Gerätespeicher" }

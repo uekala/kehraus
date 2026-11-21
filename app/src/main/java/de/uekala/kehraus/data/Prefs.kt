@@ -56,6 +56,12 @@ object Prefs {
     fun cacheHintAt(ctx: Context): Long = sp(ctx).getLong("cacheHintAt", 0)
     fun setCacheHintAt(ctx: Context, at: Long) = sp(ctx).edit().putLong("cacheHintAt", at).apply()
 
+    fun sortScreenshots(ctx: Context): Boolean = sp(ctx).getBoolean("sortScreenshots", false)
+    fun setSortScreenshots(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("sortScreenshots", v).apply()
+
+    fun sortDocs(ctx: Context): Boolean = sp(ctx).getBoolean("sortDocs", false)
+    fun setSortDocs(ctx: Context, v: Boolean) = sp(ctx).edit().putBoolean("sortDocs", v).apply()
+
     // Schutzliste: volle Pfade von Ordnern und Dateien, die keine Regel anfasst.
     fun protection(ctx: Context): Protection {
         val p = sp(ctx)

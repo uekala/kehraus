@@ -11,7 +11,12 @@ import de.uekala.kehraus.bg.CleanWorker
 import de.uekala.kehraus.bg.Runner
 import de.uekala.kehraus.core.Analysis
 import de.uekala.kehraus.core.AppUsage
+import de.uekala.kehraus.core.DocCache
+import de.uekala.kehraus.core.Documents
 import de.uekala.kehraus.core.DownloadSorter
+import de.uekala.kehraus.core.Journal
+import de.uekala.kehraus.core.Keeper
+import de.uekala.kehraus.core.ScreenshotSorter
 import de.uekala.kehraus.core.DupGroup
 import de.uekala.kehraus.core.Duplicates
 import de.uekala.kehraus.core.HistoryEntry
@@ -54,6 +59,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Wie viele Downloads im Moment einsortiert würden und wie viele sich zurücklegen lassen. */
     var sortPreview by mutableStateOf(0); private set
     var sortPending by mutableStateOf(0); private set
+
+    var sortScreenshots by mutableStateOf(Prefs.sortScreenshots(app)); private set
+    var screenshotPreview by mutableStateOf(0); private set
+    var screenshotPending by mutableStateOf(0); private set
+
+    var sortDocs by mutableStateOf(Prefs.sortDocs(app)); private set
+
+    /** Texterkennung: geprüfte Fotos, noch offene, gefundene Dokumente am alten Platz, einsortierte zum Zurücknehmen. */
+    var docChecked by mutableStateOf(0); private set
+    var docOpen by mutableStateOf(0); private set
+    var docFound by mutableStateOf(0); private set
+    var docPending by mutableStateOf(0); private set
     var lastRun by mutableStateOf<LastRun?>(Prefs.lastRun(app)); private set
     var totalFreed by mutableStateOf(Prefs.totalFreed(app)); private set
 
@@ -101,6 +118,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             sortPreview = plan
             sortPending = pending
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val shots = ScreenshotSorter.plan(Storage.root, now, guard).size
+                    val shotsPending = Journal.pending(Storage.screenshotJournal(ctx))
+                    val cache = DocCache(Storage.docCache(ctx)).load()
+                    listOf(
+                        shots, shotsPending, cache.size,
+                        Documents.candidates(Storage.root, now, cache, guard).size,
+                        Documents.plan(Storage.root, now, cache, guard).size,
+                        Journal.pending(Storage.docJournal(ctx)),
+                    )
+                }.getOrNull()
+            }?.let { v ->
+                screenshotPreview = v[0]
+                screenshotPending = v[1]
+                docChecked = v[2]
+                docOpen = v[3]
+                docFound = v[4]
+                docPending = v[5]
+            }
             val (t, s, p) = withContext(Dispatchers.IO) {
                 Triple(
                     runCatching { Storage.trash().entries() }.getOrDefault(emptyList()),
@@ -137,7 +174,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (busy) return
         busy = true
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { Runner.run(ctx) } }
+            // Von Hand: höchstens eine Minute Texterkennung je Tipp, damit die App nicht ewig „läuft“.
+            val result = withContext(Dispatchers.IO) { runCatching { Runner.run(ctx, ocrBudgetMs = 60_000L) } }
             busy = false
             val r = result.getOrNull()
             message = when {
@@ -310,6 +348,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val undone = DownloadSorter.undo(Storage.sortJournal(ctx))
         Storage.rescan(ctx, undone.flatMap { listOf(it.from, it.to) })
         "${files(undone.size)} zurück in den Download-Ordner gelegt"
+    }
+
+    fun updateSortScreenshots(v: Boolean) {
+        sortScreenshots = v
+        Prefs.setSortScreenshots(ctx, v)
+    }
+
+    fun undoScreenshots() = trashAction {
+        val undone = Journal.undo(Storage.screenshotJournal(ctx))
+        Storage.rescan(ctx, undone.flatMap { listOf(it.from, it.to) })
+        "${files(undone.size)} zurück nach Screenshots gelegt"
+    }
+
+    fun updateSortDocs(v: Boolean) {
+        sortDocs = v
+        Prefs.setSortDocs(ctx, v)
+    }
+
+    fun undoDocs() = trashAction {
+        val undone = Journal.undo(Storage.docJournal(ctx))
+        Storage.rescan(ctx, undone.flatMap { listOf(it.from, it.to) })
+        "${files(undone.size)} an ihren alten Platz zurückgelegt"
+    }
+
+    /** Legt ein WhatsApp-Bild ins Album „WhatsApp behalten“, damit keine Regel es mehr empfiehlt. */
+    fun keepFile(path: String) = trashAction {
+        val kept = Keeper.keep(Storage.root, File(path)) ?: return@trashAction "Ließ sich nicht verschieben"
+        Storage.rescan(ctx, listOf(path, kept.absolutePath))
+        gone = gone + path
+        "Nach „WhatsApp behalten“ gelegt"
     }
 
     fun updateEmptyDirs(v: Boolean) {

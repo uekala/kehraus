@@ -315,23 +315,54 @@ private fun RulesScreen(vm: MainViewModel) {
             vm.rules.filter { it.id.group == group }.forEach { rule -> RuleCard(vm, rule, onShow = { showHits = rule.id }, onTrash = { confirmTrash = rule.id }) }
         }
 
-        SectionTitle("Weitere Aufgaben")
+        SectionTitle("Sortieren")
+        Dim("Sortieren verschiebt nur in Ordner und löscht nichts. Es läuft täglich und über „Jetzt sortieren und prüfen“; jede Sortierung lässt sich zurücknehmen.", size = 13)
         Panel {
             SwitchRow(
-                "Downloads nach Art sortieren",
-                "Lose Dateien im Download-Ordner, älter als 7 Tage, wandern in Unterordner: Dokumente, Bilder, Videos, Audio, Archive, Installationsdateien. Gelöscht wird dabei nichts.",
+                "Downloads nach Art",
+                "Lose Dateien im Download-Ordner, älter als 7 Tage, wandern in Unterordner: Dokumente, Bilder, Videos, Audio, Archive, Installationsdateien.",
                 vm.sortDownloads,
             ) { vm.updateSortDownloads(it) }
+            SortStatus(
+                if (vm.sortPreview == 0) "Im Moment gibt es nichts einzusortieren." else "Würde jetzt ${files(vm.sortPreview)} einsortieren.",
+                vm.sortPending, !vm.busy,
+            ) { vm.undoSort() }
+        }
+        Panel {
+            SwitchRow(
+                "Screenshots nach Monat",
+                "Screenshots aus früheren Monaten wandern in Unterordner wie „2026-10“. Der laufende Monat bleibt, wo er ist. Die Galerie zeigt jeden Monat als eigenes Album.",
+                vm.sortScreenshots,
+            ) { vm.updateSortScreenshots(it) }
+            SortStatus(
+                if (vm.screenshotPreview == 0) "Im Moment gibt es nichts einzusortieren." else "Würde jetzt ${files(vm.screenshotPreview)} einsortieren.",
+                vm.screenshotPending, !vm.busy,
+            ) { vm.undoScreenshots() }
+        }
+        Panel {
+            SwitchRow(
+                "Belege und Dokumente",
+                "Die Texterkennung prüft Fotos aus Kamera und WhatsApp direkt auf dem Handy. Rechnungen, Kassenbons und Briefe wandern nach „Pictures/Dokumente“.",
+                vm.sortDocs,
+            ) { vm.updateSortDocs(it) }
             Dim(
-                if (vm.sortPreview == 0) "Im Moment gibt es nichts einzusortieren."
-                else "Würde jetzt ${files(vm.sortPreview)} einsortieren.",
-                size = 13,
+                "Achtung: Sichert Google Fotos nur den Kameraordner, sind einsortierte Belege nicht mehr in der Sicherung. WhatsApp-Bilder lassen sich danach im Chat nicht mehr öffnen.",
+                size = 12,
             )
-            if (vm.sortPending > 0) {
-                OutlinedButton(onClick = { vm.undoSort() }, enabled = !vm.busy) {
-                    Text("Sortierung zurücknehmen (${vm.sortPending})")
-                }
+            if (vm.sortDocs) {
+                Dim(
+                    when {
+                        vm.docChecked == 0 && vm.docOpen == 0 -> "Keine Fotos zum Prüfen."
+                        vm.docOpen > 0 -> "${vm.docChecked} Fotos geprüft, ${vm.docOpen} noch offen. Pro Lauf schafft die Erkennung einige Hundert."
+                        else -> "Alle ${vm.docChecked} Fotos geprüft."
+                    },
+                    size = 13,
+                )
             }
+            SortStatus(
+                if (vm.docFound == 0) "Kein erkanntes Dokument wartet aufs Einsortieren." else "${files(vm.docFound)} als Dokument erkannt, noch nicht einsortiert.",
+                vm.docPending, !vm.busy,
+            ) { vm.undoDocs() }
         }
         Panel {
             SwitchRow(
@@ -472,15 +503,31 @@ private fun HitsDialog(vm: MainViewModel, id: RuleId, onClose: () -> Unit) {
         title = { Text(id.fullTitle) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                item { Dim("„Schützen“ nimmt eine Datei dauerhaft von allen Regeln aus.", size = 12) }
-                items(p?.hits.orEmpty(), key = { it.file.path }) { hit ->
+                val keep = id == RuleId.WHATSAPP
+                item {
+                    Dim(
+                        if (keep) "„Behalten“ legt ein Bild ins Album „WhatsApp behalten“ – dort empfiehlt es keine Regel mehr."
+                        else "„Schützen“ nimmt eine Datei dauerhaft von allen Regeln aus.",
+                        size = 12,
+                    )
+                }
+                items(p?.hits.orEmpty().filter { it.file.path !in vm.gone }, key = { it.file.path }) { hit ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val kind = Rules.kindOf(hit.file.name)
+                        if (kind == Kind.IMAGE || kind == Kind.VIDEO) {
+                            Thumb(hit.file, hit.file.name, 44)
+                            Spacer(Modifier.width(10.dp))
+                        }
                         Column(Modifier.weight(1f)) {
                             Text(hit.file.name, color = TextMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             val age = ((now - hit.modified) / Rules.DAY_MS).toInt()
                             Dim("${vm.size(hit.size)} · ${days(age)} alt · ${hit.file.parentFile?.name.orEmpty()}", size = 12)
                         }
-                        TextButton(onClick = { vm.protectFile(hit.file.absolutePath) }) { Text("Schützen") }
+                        if (keep) {
+                            TextButton(onClick = { vm.keepFile(hit.file.absolutePath) }, enabled = !vm.busy) { Text("Behalten") }
+                        } else {
+                            TextButton(onClick = { vm.protectFile(hit.file.absolutePath) }) { Text("Schützen") }
+                        }
                     }
                 }
                 if (p != null && p.count > p.hits.size) {
@@ -893,6 +940,15 @@ private fun ruleTitle(name: String): String = when (name) {
 @Composable
 private fun Heading(text: String) {
     Text(text, color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+}
+
+/** Vorschau einer Sortierung und, wenn schon etwas einsortiert wurde, der Knopf zum Zurücknehmen. */
+@Composable
+private fun SortStatus(preview: String, pending: Int, enabled: Boolean, onUndo: () -> Unit) {
+    Dim(preview, size = 13)
+    if (pending > 0) {
+        OutlinedButton(onClick = onUndo, enabled = enabled) { Text("Zurücknehmen (${files(pending)})") }
+    }
 }
 
 @Composable

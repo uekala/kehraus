@@ -40,6 +40,19 @@ object DownloadSorter {
             .sortedBy { it.from }
     }
 
+    /** Führt die Verschiebungen aus und merkt sie sich zum Zurücknehmen. */
+    fun apply(moves: List<Move>, journal: File): List<Move> = Journal.apply(moves, journal)
+
+    fun pending(journal: File): Int = Journal.pending(journal)
+
+    fun undo(journal: File): List<Move> = Journal.undo(journal)
+}
+
+/**
+ * Verschiebungen mit Gedächtnis: Jede ausgeführte Verschiebung steht in einer kleinen Textdatei,
+ * damit sie sich später geschlossen zurücknehmen lässt. Gelöscht wird hier nie etwas.
+ */
+object Journal {
     /** Führt die Verschiebungen aus und hängt sie an [journal] an. Liefert, was wirklich verschoben wurde. */
     fun apply(moves: List<Move>, journal: File): List<Move> {
         val done = ArrayList<Move>()
@@ -62,7 +75,7 @@ object DownloadSorter {
 
     /**
      * Legt alles zurück, was noch an seinem einsortierten Platz liegt. Dateien, die inzwischen
-     * weiterbewegt oder gelöscht wurden, werden übersprungen. Liefert die zurückgelegten Verschiebungen.
+     * weiterbewegt oder gelöscht wurden, werden übersprungen. Leer gewordene Zielordner verschwinden.
      */
     fun undo(journal: File): List<Move> {
         val undone = ArrayList<Move>()
@@ -70,6 +83,7 @@ object DownloadSorter {
             val now = File(m.to)
             val back = File(m.from)
             if (!now.isFile || back.exists()) continue
+            back.parentFile?.mkdirs()
             if (now.renameTo(back)) {
                 undone.add(m)
                 now.parentFile?.let { if (it.list()?.isEmpty() == true) it.delete() }
@@ -86,7 +100,8 @@ object DownloadSorter {
             if (p.size == 2) Move(p[0], p[1]) else null
         }
 
-    private fun free(wanted: File): File {
+    /** Liegt am Ziel schon etwas, bekommt die Datei eine Nummer: „a (2).pdf". */
+    fun free(wanted: File): File {
         if (!wanted.exists()) return wanted
         val ext = wanted.extension.let { if (it.isEmpty()) "" else ".$it" }
         var n = 2
