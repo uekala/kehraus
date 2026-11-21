@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import traceback
 import subprocess
 import sys
 import tempfile
@@ -28,10 +29,19 @@ SD = "/sdcard"
 DAY = 86400
 
 
+def log(*parts: object) -> None:
+    """Schreibt nach stdout und in build/app-bilder/aufnahme.log (landet mit den Bildern im Vorschau-Zweig)."""
+    line = " ".join(str(p) for p in parts)
+    print(line, flush=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+    with (OUT / "aufnahme.log").open("a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+
+
 def adb(*args: str, check: bool = True, binary: bool = False):
     result = subprocess.run(["adb", *args], capture_output=True, check=False)
     if check and result.returncode != 0:
-        sys.stderr.write(result.stderr.decode(errors="replace"))
+        log(result.stderr.decode(errors="replace"))
         raise SystemExit(f"adb {' '.join(args)} fehlgeschlagen")
     return result.stdout if binary else result.stdout.decode(errors="replace")
 
@@ -159,19 +169,35 @@ def nodes() -> list[tuple[str, tuple[int, int, int, int]]]:
     raise SystemExit("uiautomator dump klappt nicht")
 
 
+def dismiss_anr(found) -> bool:
+    """Der Emulator in der CI ist langsam; meldet Android „… isn't responding“, auf „Wait“ tippen."""
+    if not any("isn't responding" in t or "reagiert nicht" in t for t, _ in found):
+        return False
+    for t, (x1, y1, x2, y2) in found:
+        if t in ("Wait", "Warten"):
+            log("Hängt-Meldung weggetippt")
+            sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
+            time.sleep(3)
+            return True
+    return False
+
+
 def find(text: str, exact: bool = True):
-    hits = [(t, b) for t, b in nodes() if (t == text if exact else text in t)]
+    found = nodes()
+    if dismiss_anr(found):
+        found = nodes()
+    hits = [(t, b) for t, b in found if (t == text if exact else text in t)]
     return hits
 
 
-def wait_for(text: str, timeout: float = 60, exact: bool = True):
+def wait_for(text: str, timeout: float = 90, exact: bool = True):
     end = time.time() + timeout
     while time.time() < end:
         hits = find(text, exact)
         if hits:
             return hits
         time.sleep(1.5)
-    raise SystemExit(f"„{text}“ nicht erschienen")
+    raise SystemExit(f"„{text}“ nicht erschienen. Sichtbar: {[t for t, _ in nodes()]}")
 
 
 def tap(text: str, last: bool = False, exact: bool = True, timeout: float = 30) -> None:
@@ -179,6 +205,10 @@ def tap(text: str, last: bool = False, exact: bool = True, timeout: float = 30) 
     _, (x1, y1, x2, y2) = hits[-1] if last else hits[0]
     sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
     time.sleep(1.2)
+    # Kam eine Hängt-Meldung dazwischen, hat sie den Tipp geschluckt: wegtippen und noch einmal.
+    if dismiss_anr(nodes()):
+        sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
+        time.sleep(1.2)
 
 
 def tab(label: str) -> None:
@@ -196,7 +226,7 @@ def shot(name: str) -> None:
     time.sleep(1.5)
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p", binary=True))
-    print("Bild:", name)
+    log("Bild:", name)
 
 
 def demo_statusbar() -> None:
@@ -219,6 +249,10 @@ def main() -> None:
     sh("settings put global transition_animation_scale 0", check=False)
     sh("settings put global animator_duration_scale 0", check=False)
     sh("cmd uimode night yes", check=False)
+    # Der Emulator in der CI rechnet ohne Grafikkarte; Launcher und Fehlerdialoge stören dann nur.
+    sh("settings put global hide_error_dialogs 1", check=False)
+    sh("settings put global anr_show_background 0", check=False)
+    sh("pm disable-user --user 0 com.google.android.apps.nexuslauncher", check=False)
     adb("install", "-r", "-g", str(APK))
     sh(f"appops set --uid {PKG} MANAGE_EXTERNAL_STORAGE allow")
     sh(f"appops set {PKG} GET_USAGE_STATS allow", check=False)
@@ -226,6 +260,9 @@ def main() -> None:
     write_prefs()
     demo_statusbar()
 
+    # Nach dem Hochfahren hat die System-Oberfläche noch zu tun; erst danach starten.
+    time.sleep(20)
+    find("")
     sh(f"am start -W -n {PKG}/.MainActivity")
     wait_for("Empfehlungen")
     wait_for("könnten weg", exact=False)
@@ -262,4 +299,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException:
+        log(traceback.format_exc())
+        # Was gerade zu sehen ist, für die Fehlersuche.
+        try:
+            shot("fehler")
+        except BaseException:
+            pass
+        sys.exit(1)

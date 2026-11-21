@@ -8,6 +8,15 @@ und der Papierkorb löscht nie von selbst.
 
 Gedacht für das eigene Gerät, nicht für den Play Store. Die App hat keinen Internetzugang – auch die Texterkennung arbeitet nur auf dem Gerät.
 
+<p>
+  <img src="docs/01-uebersicht.png" alt="Übersicht mit Speicher, Empfehlungen je Regel und dem letzten Lauf" width="200">
+  <img src="docs/02-regeln.png" alt="Regeln mit Schalter, Frist und Vorschau, wie viele Dateien sie gerade treffen" width="200">
+  <img src="docs/03-analyse.png" alt="Analyse: Platz nach Art der Dateien" width="200">
+  <img src="docs/05-papierkorb.png" alt="Papierkorb mit Zurücklegen und Leeren" width="200">
+</p>
+
+<sub>Aufgenommen im Android-Emulator mit erfundenen Beispieldateien (<code>tools/bilder/aufnehmen.py</code>).</sub>
+
 ## Regeln
 
 Regeln suchen, was weg könnte – sie verschieben nichts von selbst. Eingeschaltete Regeln erscheinen
