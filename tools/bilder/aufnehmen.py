@@ -169,12 +169,28 @@ def nodes() -> list[tuple[str, tuple[int, int, int, int]]]:
     raise SystemExit("uiautomator dump klappt nicht")
 
 
+def dismiss_anr(found) -> bool:
+    """Der Emulator in der CI ist langsam; meldet Android „… isn't responding“, auf „Wait“ tippen."""
+    if not any("isn't responding" in t or "reagiert nicht" in t for t, _ in found):
+        return False
+    for t, (x1, y1, x2, y2) in found:
+        if t in ("Wait", "Warten"):
+            log("Hängt-Meldung weggetippt")
+            sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
+            time.sleep(3)
+            return True
+    return False
+
+
 def find(text: str, exact: bool = True):
-    hits = [(t, b) for t, b in nodes() if (t == text if exact else text in t)]
+    found = nodes()
+    if dismiss_anr(found):
+        found = nodes()
+    hits = [(t, b) for t, b in found if (t == text if exact else text in t)]
     return hits
 
 
-def wait_for(text: str, timeout: float = 60, exact: bool = True):
+def wait_for(text: str, timeout: float = 90, exact: bool = True):
     end = time.time() + timeout
     while time.time() < end:
         hits = find(text, exact)
@@ -236,6 +252,9 @@ def main() -> None:
     write_prefs()
     demo_statusbar()
 
+    # Nach dem Hochfahren hat die System-Oberfläche noch zu tun; erst danach starten.
+    time.sleep(20)
+    find("")
     sh(f"am start -W -n {PKG}/.MainActivity")
     wait_for("Empfehlungen")
     wait_for("könnten weg", exact=False)
