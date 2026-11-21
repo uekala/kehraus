@@ -205,6 +205,10 @@ def tap(text: str, last: bool = False, exact: bool = True, timeout: float = 30) 
     _, (x1, y1, x2, y2) = hits[-1] if last else hits[0]
     sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
     time.sleep(1.2)
+    # Kam eine Hängt-Meldung dazwischen, hat sie den Tipp geschluckt: wegtippen und noch einmal.
+    if dismiss_anr(nodes()):
+        sh(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
+        time.sleep(1.2)
 
 
 def tab(label: str) -> None:
@@ -245,6 +249,10 @@ def main() -> None:
     sh("settings put global transition_animation_scale 0", check=False)
     sh("settings put global animator_duration_scale 0", check=False)
     sh("cmd uimode night yes", check=False)
+    # Der Emulator in der CI rechnet ohne Grafikkarte; Launcher und Fehlerdialoge stören dann nur.
+    sh("settings put global hide_error_dialogs 1", check=False)
+    sh("settings put global anr_show_background 0", check=False)
+    sh("pm disable-user --user 0 com.google.android.apps.nexuslauncher", check=False)
     adb("install", "-r", "-g", str(APK))
     sh(f"appops set --uid {PKG} MANAGE_EXTERNAL_STORAGE allow")
     sh(f"appops set {PKG} GET_USAGE_STATS allow", check=False)

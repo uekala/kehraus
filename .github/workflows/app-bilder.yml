@@ -51,6 +51,8 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disk-size: 4096M
+          cores: 4
+          ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: python3 tools/bilder/aufnehmen.py
