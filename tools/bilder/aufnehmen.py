@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import traceback
 import subprocess
 import sys
 import tempfile
@@ -28,10 +29,19 @@ SD = "/sdcard"
 DAY = 86400
 
 
+def log(*parts: object) -> None:
+    """Schreibt nach stdout und in build/app-bilder/aufnahme.log (landet mit den Bildern im Vorschau-Zweig)."""
+    line = " ".join(str(p) for p in parts)
+    print(line, flush=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+    with (OUT / "aufnahme.log").open("a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+
+
 def adb(*args: str, check: bool = True, binary: bool = False):
     result = subprocess.run(["adb", *args], capture_output=True, check=False)
     if check and result.returncode != 0:
-        sys.stderr.write(result.stderr.decode(errors="replace"))
+        log(result.stderr.decode(errors="replace"))
         raise SystemExit(f"adb {' '.join(args)} fehlgeschlagen")
     return result.stdout if binary else result.stdout.decode(errors="replace")
 
@@ -171,7 +181,7 @@ def wait_for(text: str, timeout: float = 60, exact: bool = True):
         if hits:
             return hits
         time.sleep(1.5)
-    raise SystemExit(f"„{text}“ nicht erschienen")
+    raise SystemExit(f"„{text}“ nicht erschienen. Sichtbar: {[t for t, _ in nodes()]}")
 
 
 def tap(text: str, last: bool = False, exact: bool = True, timeout: float = 30) -> None:
@@ -196,7 +206,7 @@ def shot(name: str) -> None:
     time.sleep(1.5)
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"{name}.png").write_bytes(adb("exec-out", "screencap", "-p", binary=True))
-    print("Bild:", name)
+    log("Bild:", name)
 
 
 def demo_statusbar() -> None:
@@ -262,4 +272,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException:
+        log(traceback.format_exc())
+        # Was gerade zu sehen ist, für die Fehlersuche.
+        try:
+            shot("fehler")
+        except BaseException:
+            pass
+        sys.exit(1)

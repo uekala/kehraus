@@ -108,7 +108,7 @@ jobs:
           fi
           rm -rf "pr-$PR"
           mkdir -p "pr-$PR"
-          cp ../bilder/*.png "pr-$PR/"
+          cp ../bilder/* "pr-$PR/"
           {
             echo "# App-Bilder zu Pull Request #$PR"
             echo
