@@ -1,5 +1,11 @@
 # Änderungen
 
+## 0.2.0
+
+- Neuer Signaturschlüssel mit Schlüsselrotation: Das Update installiert sich über die vorhandene App, Einstellungen und Verlauf bleiben; ab Android 13 gilt danach nur noch der neue Schlüssel
+- Releases nur noch gezielt (Tag `mobile-vX.Y.Z`) statt bei jedem Push; Updates am einfachsten über Obtainium
+- Testversion „Kehraus Test“ (`de.uekala.kehraus.test`) läuft neben der echten App
+
 ## 0.1
 
 - Regeln für Screenshots, WhatsApp-Medien, Downloads und große Videos, jeweils mit Vorschau

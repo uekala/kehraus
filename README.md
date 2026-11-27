@@ -80,26 +80,56 @@ Der Papierkorb übersteht deshalb auch eine Neuinstallation.
 
 ## Einrichten
 
-1. APK aus dem neuesten [Release](../../releases) laden und installieren.
+1. Kehraus in [Obtainium](https://github.com/ImranR98/Obtainium) mit der Adresse
+   `https://github.com/uekala/kehraus` hinzufügen (oder die APK aus dem neuesten
+   [Release](../../releases) laden). Updates installiert Obtainium über die vorhandene App; Kehraus
+   selbst hat keinen Internetzugriff und sucht deshalb nicht nach Updates.
 2. In der App „Zugriff erlauben“ antippen und den Zugriff auf alle Dateien einschalten.
 3. Unter *Regeln* die Vorschau ansehen und einschalten, was passt.
 
 Sortiert und geprüft wird einmal am Tag im Hintergrund oder sofort über „Jetzt sortieren und prüfen“.
 
-## Bauen
+## Bauen und Releases
 
-Jeder Push auf `main` baut über GitHub Actions eine signierte APK und legt ein Release an;
-Pull Requests werden gebaut und getestet. Lokal: `./gradlew testReleaseUnitTest assembleRelease`
-(JDK 17, Android SDK 35).
+- Push auf `main` und Pull Requests: Tests, Prüfung „kein Internet“, Testversion als Artefakt
+  (`de.uekala.kehraus.test`, heißt „Kehraus Test“, läuft neben der echten App und nutzt denselben
+  Papierkorb-Ordner) und eine Probe der Release-Signatur mit Wegwerf-Schlüsseln. Ein Release
+  entsteht dabei nicht.
+- Release: `appVersion` in `gradle.properties` erhöhen, Abschnitt `## X.Y.Z` in `CHANGELOG.md`
+  ergänzen, Tag `mobile-vX.Y.Z` pushen. Die CI baut, signiert und prüft die APK und legt das
+  Release „Kehraus Mobile X.Y.Z“ mit `kehraus-X.Y.Z.apk` an.
+- `versionCode` ist die Laufnummer des Workflows und steigt deshalb mit jedem Build.
+- Lokal: `./gradlew testReleaseUnitTest assembleDebug` (JDK 17, Android SDK 35). Lokal gebaute
+  Release-APKs sind unsigniert.
 
 Die Aufräum-Logik liegt in `app/src/main/java/de/uekala/kehraus/core` und kommt ohne Android aus;
 die Tests dazu stehen in `app/src/test`.
 
 ## Signatur
 
-`signing/sideload.jks` ist ein reiner Sideload-Schlüssel, damit Updates sich über die
-vorherige Version installieren lassen. Bevor das Repo öffentlich wird, gehört der Schlüssel
-in ein GitHub-Secret.
+Bis 0.1 signierte ein Sideload-Schlüssel aus `signing/`, der öffentlich im Repository lag. Seit 0.2
+signiert ein neuer Schlüssel, der nur in den GitHub-Secrets liegt; eine Lineage (Schlüsselrotation,
+APK Signature Scheme v3.1) belegt, dass der alte ihn bestätigt hat. Updates lassen sich deshalb weiter
+über die installierte App spielen, Einstellungen und Verlauf bleiben erhalten. Ab Android 13 nimmt
+das Gerät danach keine APK mehr an, die nur mit dem alten Schlüssel signiert ist.
+
+Einrichtung (einmalig, am eigenen Rechner mit JDK und angemeldetem `gh`):
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/uekala/kehraus/main/tools/setup-android-signing.sh
+bash setup-android-signing.sh
+```
+
+Das Skript holt den alten Schlüssel aus der Git-Historie, erzeugt den neuen und trägt beide als
+Secrets ein (`ANDROID_*`, `ANDROID_OLD_*`) sowie den Fingerabdruck als Variable
+`ANDROID_SIGNING_CERT_SHA256`. Keystore und Passwort danach in den Passwortmanager.
+
+| Datei | Zweck |
+|---|---|
+| `tools/sign-release.sh` | signiert die Release-APK mit Rotation |
+| `tools/verify-apk-signature.sh` | prüft v3.1, Lineage alt → neu und den Fingerabdruck |
+| `tools/signatur-probe.sh` | Probelauf mit Wegwerf-Schlüsseln bei jedem Build |
+| `tools/setup-android-signing.sh` | einmalige Einrichtung der Secrets |
 
 ## Analyse
 
