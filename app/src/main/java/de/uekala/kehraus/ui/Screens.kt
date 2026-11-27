@@ -682,6 +682,8 @@ private fun AnalysisScreen(vm: MainViewModel) {
 @Composable
 private fun FolderPanel(vm: MainViewModel, report: Report, onFile: (FileInfo) -> Unit) {
     var dir by remember(report) { mutableStateOf(report.root) }
+    // Zurück-Taste geht erst einen Ordner hoch, bevor sie den Reiter verlässt.
+    BackHandler(enabled = dir != report.root) { dir = dir.substringBeforeLast('/', report.root) }
     Panel("Ordner") {
         Dim(Storage.relative(dir) + " · " + vm.size(report.folders[dir]?.bytes ?: 0), size = 13)
         if (dir != report.root) {
