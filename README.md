@@ -96,8 +96,10 @@ Sortiert und geprüft wird einmal am Tag im Hintergrund oder sofort über „Jet
   Papierkorb-Ordner) und eine Probe der Release-Signatur mit Wegwerf-Schlüsseln. Ein Release
   entsteht dabei nicht.
 - Release: `appVersion` in `gradle.properties` erhöhen, Abschnitt `## X.Y.Z` in `CHANGELOG.md`
-  ergänzen, Tag `mobile-vX.Y.Z` pushen. Die CI baut, signiert und prüft die APK und legt das
-  Release „Kehraus Mobile X.Y.Z“ mit `kehraus-X.Y.Z.apk` an.
+  ergänzen und auf `main` bringen. Dann unter *Actions → APK bauen → Run workflow* (Branch `main`)
+  den Haken „Release anlegen“ setzen – oder den Tag `mobile-vX.Y.Z` pushen. Die CI baut, signiert
+  und prüft die APK, legt den Tag an und veröffentlicht das Release „Kehraus Mobile X.Y.Z“ mit
+  `kehraus-X.Y.Z.apk`. Ein von Hand angelegtes Release mit diesem Tag ergänzt sie um APK und Text.
 - `versionCode` ist die Laufnummer des Workflows und steigt deshalb mit jedem Build.
 - Lokal: `./gradlew testReleaseUnitTest assembleDebug` (JDK 17, Android SDK 35). Lokal gebaute
   Release-APKs sind unsigniert.
