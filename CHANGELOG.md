@@ -4,7 +4,7 @@
 
 - „Rückgängig“ in der Meldung, nachdem Regeln, Duplikate oder einzelne Dateien in den Papierkorb gewandert sind
 - Rückfrage vor „Endgültig löschen“ einer einzelnen Datei
-- Zurück-Taste führt aus jedem Reiter erst zur Übersicht
+- Zurück-Taste führt aus jedem Reiter erst zur Übersicht; im Ordner-Browser der Analyse geht sie erst einen Ordner hoch
 - Schmaler Ladebalken oben, solange etwas läuft
 - Zähler am Reiter „Papierkorb“
 - Schalter: die ganze Zeile ist antippbar; −/+ größer und mit Beschriftung für TalkBack
