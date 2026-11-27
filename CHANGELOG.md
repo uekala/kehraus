@@ -1,5 +1,14 @@
 # Änderungen
 
+## Unveröffentlicht
+
+- „Rückgängig“ in der Meldung, nachdem Regeln, Duplikate oder einzelne Dateien in den Papierkorb gewandert sind
+- Rückfrage vor „Endgültig löschen“ einer einzelnen Datei
+- Zurück-Taste führt aus jedem Reiter erst zur Übersicht
+- Schmaler Ladebalken oben, solange etwas läuft
+- Zähler am Reiter „Papierkorb“
+- Schalter: die ganze Zeile ist antippbar; −/+ größer und mit Beschriftung für TalkBack
+
 ## 0.2.0
 
 - Neuer Signaturschlüssel mit Schlüsselrotation: Das Update installiert sich über die vorhandene App, Einstellungen und Verlauf bleiben; ab Android 13 gilt danach nur noch der neue Schlüssel

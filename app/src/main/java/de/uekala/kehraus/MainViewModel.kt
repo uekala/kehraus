@@ -96,6 +96,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     var busy by mutableStateOf(false); private set
     var message by mutableStateOf<String?>(null)
 
+    /** Was die letzte Aktion in den Papierkorb gelegt hat – für „Rückgängig“ in der Meldung. */
+    var undoIds by mutableStateOf<List<String>>(emptyList()); private set
+
     val trashBytes: Long get() = trash.sumOf { it.size }
 
     fun refresh() {
@@ -195,7 +198,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Verschiebt, was eine Regel gerade findet, in den Papierkorb. Nur nach Bestätigung in der Oberfläche aufrufen. */
-    fun trashRule(id: RuleId) = trashAction {
+    fun trashRule(id: RuleId) = trashAction(undoable = true) {
         val r = Runner.trash(ctx, setOf(id)) ?: return@trashAction "Erst den Dateizugriff erlauben"
         buildString {
             append("${files(r.moved)} (${size(r.movedBytes)}) in den Papierkorb verschoben")
@@ -223,17 +226,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         "${files(freed.count)} endgültig gelöscht (${size(freed.bytes)})"
     }
 
-    private fun trashAction(block: () -> String) {
+    private fun trashAction(undoable: Boolean = false, block: () -> String) {
         if (busy) return
         busy = true
+        undoIds = emptyList()
         viewModelScope.launch {
+            var added = emptyList<String>()
             val text = withContext(Dispatchers.IO) {
-                runCatching(block).getOrElse { "Fehlgeschlagen: ${it.message ?: "unbekannter Fehler"}" }
+                val before = if (undoable) runCatching { Storage.trash().entries().map { it.id }.toSet() }.getOrDefault(emptySet()) else emptySet()
+                val t = runCatching(block).getOrElse { "Fehlgeschlagen: ${it.message ?: "unbekannter Fehler"}" }
+                if (undoable) {
+                    added = runCatching { Storage.trash().entries().map { it.id }.filter { it !in before } }.getOrDefault(emptyList())
+                }
+                t
             }
             busy = false
+            undoIds = added
             message = text
             refresh()
         }
+    }
+
+    /** Legt zurück, was die letzte Aktion verschoben hat. */
+    fun undoLast() {
+        val ids = undoIds
+        if (ids.isEmpty()) return
+        undoIds = emptyList()
+        gone = gone - ids.mapNotNull { id -> trash.firstOrNull { it.id == id }?.original }.toSet()
+        restore(ids)
     }
 
     // ---------- Apps ----------
@@ -282,7 +302,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Verschiebt einzelne Dateien von Hand in den Papierkorb; [label] steht später als Herkunft dabei. */
-    fun trashFiles(paths: List<String>, label: String) = trashAction {
+    fun trashFiles(paths: List<String>, label: String) = trashAction(undoable = true) {
         val store = Storage.trash()
         val now = System.currentTimeMillis()
         var bytes = 0L
