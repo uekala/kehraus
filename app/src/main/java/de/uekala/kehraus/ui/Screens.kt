@@ -3,6 +3,7 @@ package de.uekala.kehraus.ui
 import android.graphics.BitmapFactory
 import android.media.ThumbnailUtils
 import android.util.Size
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,6 +35,8 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -42,7 +45,9 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +67,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -113,10 +122,18 @@ fun App(vm: MainViewModel) {
     val message = vm.message
     LaunchedEffect(message) {
         if (message != null) {
-            snackbar.showSnackbar(message)
+            val undo = vm.undoIds.isNotEmpty()
+            val result = snackbar.showSnackbar(
+                message,
+                actionLabel = if (undo) "Rückgängig" else null,
+                duration = if (undo) SnackbarDuration.Long else SnackbarDuration.Short,
+            )
             vm.message = null
+            if (result == SnackbarResult.ActionPerformed) vm.undoLast()
         }
     }
+    // Zurück-Taste: erst zur Übersicht, dann wie gewohnt aus der App.
+    BackHandler(enabled = tab != 0) { tab = 0 }
 
     Scaffold(
         containerColor = Bg,
@@ -134,7 +151,15 @@ fun App(vm: MainViewModel) {
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
-                        icon = { Icon(icon, contentDescription = null) },
+                        icon = {
+                            if (i == 4 && vm.trash.isNotEmpty()) {
+                                BadgedBox(badge = { Badge { Text(if (vm.trash.size > 99) "99+" else "${vm.trash.size}") } }) {
+                                    Icon(icon, contentDescription = null)
+                                }
+                            } else {
+                                Icon(icon, contentDescription = null)
+                            }
+                        },
                         label = { Text(label, maxLines = 1, fontSize = 11.sp) },
                     )
                 }
@@ -148,6 +173,13 @@ fun App(vm: MainViewModel) {
                 2 -> AnalysisScreen(vm)
                 3 -> AppsScreen(vm)
                 else -> TrashScreen(vm)
+            }
+            if (vm.busy || vm.analyzing != null) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),
+                    color = Accent,
+                    trackColor = Bg,
+                )
             }
         }
     }
@@ -840,6 +872,7 @@ private fun AppRow(vm: MainViewModel, app: AppUsage, now: Long, value: String) {
 private fun TrashScreen(vm: MainViewModel) {
     var selected by remember { mutableStateOf<TrashEntry?>(null) }
     var confirmEmpty by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf<TrashEntry?>(null) }
     val store = remember { Storage.trash() }
 
     LazyColumn(
@@ -855,7 +888,11 @@ private fun TrashScreen(vm: MainViewModel) {
                     else "${files(vm.trash.size)} · ${vm.size(vm.trashBytes)}",
                     color = TextMain,
                 )
-                Dim("Der Papierkorb löscht nichts von selbst. Erst „Leeren“ gibt den Platz frei.", size = 13)
+                Dim(
+                    if (vm.trash.isEmpty()) "Was Regeln, Analyse oder du verschieben, landet hier und lässt sich zurücklegen."
+                    else "Der Papierkorb löscht nichts von selbst. Erst „Leeren“ gibt den Platz frei. Tippen öffnet eine Datei.",
+                    size = 13,
+                )
                 if (vm.trash.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
@@ -906,8 +943,20 @@ private fun TrashScreen(vm: MainViewModel) {
                 TextButton(onClick = { vm.restore(listOf(e.id)); selected = null }) { Text("Zurücklegen") }
             },
             dismissButton = {
-                TextButton(onClick = { vm.delete(listOf(e.id)); selected = null }) { Text("Endgültig löschen", color = Bad) }
+                TextButton(onClick = { confirmDelete = e; selected = null }) { Text("Endgültig löschen", color = Bad) }
             },
+        )
+    }
+
+    confirmDelete?.let { e ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("Endgültig löschen?") },
+            text = { Text("„${e.name}“ (${vm.size(e.size)}) wird gelöscht. Das lässt sich nicht rückgängig machen.") },
+            confirmButton = {
+                TextButton(onClick = { vm.delete(listOf(e.id)); confirmDelete = null }) { Text("Löschen", color = Bad) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Abbrechen") } },
         )
     }
 
@@ -939,7 +988,7 @@ private fun ruleTitle(name: String): String = when (name) {
 
 @Composable
 private fun Heading(text: String) {
-    Text(text, color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+    Text(text, color = TextMain, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
 }
 
 /** Vorschau einer Sortierung und, wenn schon etwas einsortiert wurde, der Knopf zum Zurücknehmen. */
@@ -991,13 +1040,17 @@ private fun KeyValue(key: String, value: String) {
 
 @Composable
 private fun SwitchRow(title: String, hint: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // Die ganze Zeile schaltet, nicht nur der kleine Schalter.
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Switch) { onChange(!checked) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
             Text(title, color = TextMain)
             if (hint != null) Dim(hint, size = 12)
         }
         Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -1007,7 +1060,7 @@ private fun Stepper(label: String, value: Int, options: List<Int>, format: (Int)
     val i = options.indexOfFirst { it >= value }.let { if (it < 0) options.lastIndex else it }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = TextMain, modifier = Modifier.weight(1f))
-        StepButton("−", i > 0) { onChange(options[i - 1]) }
+        StepButton("−", "$label: weniger", i > 0) { onChange(options[i - 1]) }
         Text(
             format(value),
             color = TextMain,
@@ -1015,14 +1068,16 @@ private fun Stepper(label: String, value: Int, options: List<Int>, format: (Int)
             textAlign = TextAlign.Center,
             modifier = Modifier.widthIn(min = 84.dp),
         )
-        StepButton("+", i < options.lastIndex) { onChange(options[i + 1]) }
+        StepButton("+", "$label: mehr", i < options.lastIndex) { onChange(options[i + 1]) }
     }
 }
 
 @Composable
-private fun StepButton(symbol: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepButton(symbol: String, description: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(40.dp).clip(CircleShape).background(SurfaceHigh).clickable(enabled = enabled, onClick = onClick),
+        Modifier.size(44.dp).clip(CircleShape).background(SurfaceHigh)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Text(symbol, color = if (enabled) TextMain else Track, fontSize = 20.sp)
