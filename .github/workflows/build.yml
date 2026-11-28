@@ -62,7 +62,7 @@ jobs:
           echo "VERSION_NAME=$VERSION" >> "$GITHUB_ENV"
 
       - name: Tests
-        run: ./gradlew --no-daemon testReleaseUnitTest
+        run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Android Lint
         run: ./gradlew --no-daemon lintDebug

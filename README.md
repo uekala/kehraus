@@ -101,7 +101,7 @@ Sortiert und geprüft wird einmal am Tag im Hintergrund oder sofort über „Jet
   und prüft die APK, legt den Tag an und veröffentlicht das Release „Kehraus Mobile X.Y.Z“ mit
   `kehraus-X.Y.Z.apk`. Ein von Hand angelegtes Release mit diesem Tag ergänzt sie um APK und Text.
 - `versionCode` ist die Laufnummer des Workflows und steigt deshalb mit jedem Build.
-- Lokal: `./gradlew testReleaseUnitTest assembleDebug` (JDK 17, Android SDK 35). Lokal gebaute
+- Lokal: `./gradlew testDebugUnitTest assembleDebug` (JDK 17, Android SDK 37). Lokal gebaute
   Release-APKs sind unsigniert.
 
 Die Aufräum-Logik liegt in `app/src/main/java/de/uekala/kehraus/core` und kommt ohne Android aus;
