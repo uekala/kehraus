@@ -206,6 +206,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Alle Empfehlungen der Übersicht auf einmal – mit Rückgängig. Nur nach Bestätigung aufrufen. */
+    fun trashRecommended(ids: Set<RuleId>) = trashAction(undoable = true) {
+        if (ids.isEmpty()) return@trashAction "Nichts zu verschieben"
+        val r = Runner.trash(ctx, ids) ?: return@trashAction "Erst den Dateizugriff erlauben"
+        buildString {
+            append("${files(r.moved)} (${size(r.movedBytes)}) in den Papierkorb verschoben")
+            if (r.failed > 0) append(" · ${files(r.failed)} ließen sich nicht verschieben")
+        }
+    }
+
     fun restore(ids: List<String>, protect: Boolean = false) = trashAction {
         val store = Storage.trash()
         val restored = ids.mapNotNull { store.restore(it) }

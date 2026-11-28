@@ -29,11 +29,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -63,7 +62,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -142,9 +145,9 @@ fun App(vm: MainViewModel) {
             NavigationBar(containerColor = Surface) {
                 val tabs = listOf(
                     "Übersicht" to Icons.Filled.Home,
-                    "Regeln" to Icons.Filled.Settings,
+                    "Regeln" to Icons.AutoMirrored.Filled.List,
                     "Analyse" to Icons.Filled.Search,
-                    "Apps" to Icons.Filled.Menu,
+                    "Apps" to AppsIcon,
                     "Papierkorb" to Icons.Filled.Delete,
                 )
                 tabs.forEachIndexed { i, (label, icon) ->
@@ -168,7 +171,7 @@ fun App(vm: MainViewModel) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                0 -> Overview(vm, onOpenRules = { tab = 1 }, onOpenApps = { tab = 3 })
+                0 -> Overview(vm, onOpenRules = { tab = 1 }, onOpenAnalysis = { tab = 2 }, onOpenApps = { tab = 3 })
                 1 -> RulesScreen(vm)
                 2 -> AnalysisScreen(vm)
                 3 -> AppsScreen(vm)
@@ -188,8 +191,9 @@ fun App(vm: MainViewModel) {
 // ---------- Übersicht ----------
 
 @Composable
-private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () -> Unit) {
+private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenAnalysis: () -> Unit, onOpenApps: () -> Unit) {
     val ctx = LocalContext.current
+    var confirmAll by remember { mutableStateOf(false) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -243,22 +247,57 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () 
 
         val active = vm.rules.filter { it.enabled }
         val recs = active.mapNotNull { r -> vm.previews[r.id]?.takeIf { it.count > 0 }?.let { r.id to it } }
+        // Duplikate aus der Analyse, solange die Duplikat-Regel aus ist – sonst stehen sie schon in den Empfehlungen.
+        val dupRuleOn = active.any { it.id == RuleId.DUPLICATES }
+        val analysisDups = if (dupRuleOn) emptyList() else vm.duplicates.orEmpty()
         Panel("Empfehlungen") {
             when {
-                active.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
+                active.isEmpty() && analysisDups.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
                     Dim("Noch ist keine Regel eingeschaltet.", Modifier.weight(1f))
                     TextButton(onClick = onOpenRules) { Text("Regeln") }
                 }
-                recs.isEmpty() -> Dim("Im Moment gibt es nichts zu empfehlen.")
+                recs.isEmpty() && analysisDups.isEmpty() -> Dim("Im Moment gibt es nichts zu empfehlen.")
                 else -> {
-                    Text("${files(recs.sumOf { it.second.count })} · ${vm.size(recs.sumOf { it.second.bytes })} könnten weg", color = Accent)
-                    recs.forEach { (id, p) -> KeyValue(id.fullTitle, "${files(p.count)} · ${vm.size(p.bytes)}") }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Dim("Kehraus verschiebt nichts von selbst – du entscheidest unter „Regeln“.", Modifier.weight(1f), size = 12)
-                        TextButton(onClick = onOpenRules) { Text("Ansehen") }
+                    if (recs.isNotEmpty()) {
+                        Text("${files(recs.sumOf { it.second.count })} · ${vm.size(recs.sumOf { it.second.bytes })} könnten weg", color = Accent)
+                        recs.forEach { (id, p) -> KeyValue(id.fullTitle, "${files(p.count)} · ${vm.size(p.bytes)}") }
+                        Button(
+                            onClick = { confirmAll = true },
+                            enabled = vm.hasAccess && !vm.busy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Alles Empfohlene in den Papierkorb") }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Dim("Einzeln ansehen und auswählen geht unter „Regeln“.", Modifier.weight(1f), size = 12)
+                            TextButton(onClick = onOpenRules) { Text("Regeln") }
+                        }
+                    }
+                    if (analysisDups.isNotEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Doppelte Dateien", color = TextMain, fontSize = 14.sp)
+                                Dim("${analysisDups.size} Gruppen · ${vm.size(analysisDups.sumOf { it.wasted })} doppelt belegt", size = 12)
+                            }
+                            TextButton(onClick = onOpenAnalysis) { Text("Analyse") }
+                        }
                     }
                 }
             }
+        }
+        if (confirmAll) {
+            AlertDialog(
+                onDismissRequest = { confirmAll = false },
+                title = { Text("Alles Empfohlene verschieben?") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        recs.forEach { (id, p) -> KeyValue(id.fullTitle, "${files(p.count)} · ${vm.size(p.bytes)}") }
+                        Dim("Alles landet im Papierkorb und lässt sich dort zurücklegen. Endgültig gelöscht wird erst nach der Frist oder beim Leeren.", size = 13)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { confirmAll = false; vm.trashRecommended(recs.map { it.first }.toSet()) }) { Text("Verschieben") }
+                },
+                dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Abbrechen") } },
+            )
         }
 
         Panel("Sortieren") {
@@ -287,26 +326,6 @@ private fun Overview(vm: MainViewModel, onOpenRules: () -> Unit, onOpenApps: () 
             KeyValue("Im Papierkorb", "${files(vm.trash.size)} · ${vm.size(vm.trashBytes)}")
             KeyValue("Bisher endgültig gelöscht", vm.size(vm.totalFreed))
             Dim("Der Papierkorb löscht nichts von selbst. Platz wird erst frei, wenn du ihn leerst.", size = 12)
-        }
-
-        Panel("Automatik") {
-            SwitchRow(
-                "Täglich sortieren und prüfen",
-                "Einmal am Tag im Hintergrund, nicht bei schwachem Akku. Verschiebt nichts in den Papierkorb.",
-                vm.auto,
-            ) { vm.updateAuto(it) }
-            SwitchRow("Melden, wenn es etwas gibt", "Was einsortiert wurde, Empfehlungen und ein voller Papierkorb – höchstens einmal pro Woche.", vm.notify) { vm.updateNotify(it) }
-        }
-
-        if (vm.history.isNotEmpty()) {
-            Panel("Verlauf") {
-                vm.history.take(12).forEach { e ->
-                    Column {
-                        Text(historyTitle(e), color = TextMain, fontSize = 14.sp)
-                        Dim("${dateTime(e.at)} · ${historyDetail(vm, e)}", size = 12)
-                    }
-                }
-            }
         }
     }
 }
@@ -341,7 +360,16 @@ private fun RulesScreen(vm: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Heading("Regeln")
-        Dim("Regeln suchen, was weg könnte. Sie verschieben nichts von selbst: Eingeschaltete Regeln erscheinen als Empfehlung auf der Übersicht. In den Papierkorb kommt nur, was du hier per Knopf bestätigst.")
+        Dim("Regeln suchen, was weg könnte. Sie verschieben nichts von selbst: Eingeschaltete Regeln erscheinen als Empfehlung auf der Übersicht. In den Papierkorb kommt nur, was du dort oder hier per Knopf bestätigst.")
+        Panel("Automatik") {
+            SwitchRow(
+                "Täglich sortieren und prüfen",
+                "Einmal am Tag im Hintergrund, nicht bei schwachem Akku. Verschiebt nichts in den Papierkorb.",
+                vm.auto,
+            ) { vm.updateAuto(it) }
+            SwitchRow("Melden, wenn es etwas gibt", "Was einsortiert wurde, Empfehlungen und ein voller Papierkorb – höchstens einmal pro Woche.", vm.notify) { vm.updateNotify(it) }
+        }
+
         Group.entries.forEach { group ->
             SectionTitle(group.title)
             vm.rules.filter { it.id.group == group }.forEach { rule -> RuleCard(vm, rule, onShow = { showHits = rule.id }, onTrash = { confirmTrash = rule.id }) }
@@ -925,6 +953,19 @@ private fun TrashScreen(vm: MainViewModel) {
                 }
             }
         }
+        if (vm.history.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(8.dp))
+                Panel("Verlauf") {
+                    vm.history.take(12).forEach { e ->
+                        Column {
+                            Text(historyTitle(e), color = TextMain, fontSize = 14.sp)
+                            Dim("${dateTime(e.at)} · ${historyDetail(vm, e)}", size = 12)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     selected?.let { e ->
@@ -1120,4 +1161,21 @@ private fun loadThumb(file: File, kind: Kind, px: Int): ImageBitmap? = when (kin
     }
     Kind.VIDEO -> ThumbnailUtils.createVideoThumbnail(file, Size(px, px), null).asImageBitmap()
     Kind.AUDIO, Kind.OTHER -> null
+}
+
+/** Raster aus neun Quadraten – das übliche Symbol für „Apps“ (nicht im Kern-Symbolsatz enthalten). */
+private val AppsIcon: ImageVector by lazy {
+    ImageVector.Builder("Apps", 24.dp, 24.dp, 24f, 24f).apply {
+        listOf(4f, 10f, 16f).forEach { x ->
+            listOf(4f, 10f, 16f).forEach { y ->
+                addPath(
+                    pathData = listOf(
+                        PathNode.MoveTo(x, y), PathNode.HorizontalTo(x + 4f), PathNode.VerticalTo(y + 4f),
+                        PathNode.HorizontalTo(x), PathNode.Close,
+                    ),
+                    fill = SolidColor(Color.Black),
+                )
+            }
+        }
+    }.build()
 }
