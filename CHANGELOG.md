@@ -8,6 +8,10 @@
 - Schmaler Ladebalken oben, solange etwas läuft
 - Zähler am Reiter „Papierkorb“
 - Schalter: die ganze Zeile ist antippbar; −/+ größer und mit Beschriftung für TalkBack
+- Übersicht: „Alles Empfohlene in den Papierkorb“ mit Rückfrage und Rückgängig – kein Umweg mehr über „Regeln“
+- Übersicht: doppelte Dateien aus der letzten Analyse erscheinen als Empfehlung, auch wenn die Duplikat-Regel aus ist
+- Übersicht kürzer: „Automatik“ steht jetzt oben bei „Regeln“, der Verlauf im Papierkorb
+- Passendere Symbole: Liste für „Regeln“, Raster für „Apps“
 
 ## 0.2.0
 
