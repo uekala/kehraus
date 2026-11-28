@@ -21,7 +21,9 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-PKG = "de.uekala.kehraus"
+# Aufgenommen wird der Debug-Build, der seit dem App-Standard „.test“ an die Paket-ID hängt.
+PKG = "de.uekala.kehraus.test"
+ACTIVITY = "de.uekala.kehraus.MainActivity"
 ROOT = Path(__file__).resolve().parents[2]
 APK = ROOT / "app/build/outputs/apk/debug/app-debug.apk"
 OUT = ROOT / "build/app-bilder"
@@ -263,7 +265,7 @@ def main() -> None:
     # Nach dem Hochfahren hat die System-Oberfläche noch zu tun; erst danach starten.
     time.sleep(20)
     find("")
-    sh(f"am start -W -n {PKG}/.MainActivity")
+    sh(f"am start -W -n {PKG}/{ACTIVITY}")
     wait_for("Empfehlungen")
     wait_for("könnten weg", exact=False)
     tap("Jetzt sortieren und prüfen")
