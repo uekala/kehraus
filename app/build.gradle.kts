@@ -47,6 +47,8 @@ android {
         abortOnError = true
         // Versionen von Abhängigkeiten und Werkzeugen hält Dependabot aktuell.
         disable += setOf("GradleDependency", "AndroidGradlePluginVersion", "NewerVersionAvailable")
+        // Fehlalarm: Lint erkennt „value = withContext(...)“ in produceState nicht als Zuweisung.
+        disable += "ProduceStateDoesNotAssignValue"
     }
 }
 

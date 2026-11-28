@@ -1,6 +1,5 @@
 package de.uekala.kehraus.ui
 
-import android.annotation.SuppressLint
 import android.graphics.BitmapFactory
 import android.media.ThumbnailUtils
 import android.util.Size
@@ -449,8 +448,6 @@ private fun RulesScreen(vm: MainViewModel) {
 }
 
 /** Kleiner Ordner-Browser: durch den Gerätespeicher blättern und einen Ordner auswählen. */
-// produceState setzt value unten sehr wohl; Lint erkennt die Zuweisung mit withContext nicht.
-@SuppressLint("ProduceStateDoesNotAssignValue")
 @Composable
 private fun FolderPicker(onPick: (File) -> Unit, onClose: () -> Unit) {
     val root = remember { Storage.root }
